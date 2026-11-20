@@ -30,7 +30,7 @@ A cél: ne legyenek meg nem jelenések és szó nélküli lemondások.
 - `GET /api/admin/vouchers`, `POST /api/admin/vouchers/:id/(payment-confirmed|redeem)`
 - `GET /api/admin/reminders?due=1`, `POST /api/admin/reminders/:id`
 
-Admin felület: a frontend `/#/admin` oldala.
+Admin felület: külön app készül; addig az `/api/admin/*` végpontok `Authorization: Bearer <ADMIN_TOKEN>` fejléccel érhetők el.
 
 ## Fizetés
 

@@ -165,39 +165,3 @@
 .pill-wait { color: var(--gold); border-color: rgba(181, 154, 128, 0.6); }
 .pill-off { color: var(--muted); border-color: var(--line); }
 .pill-warn { color: #ffb4be; border-color: rgba(255, 180, 190, 0.45); }
-
-/* ---------- Különálló oldal (admin bejelentkezés) ---------- */
-.page-shell { min-height: 100vh; background: radial-gradient(50% 40% at 80% 0, rgba(201, 100, 130, 0.18), transparent 70%), var(--night); }
-.page-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px var(--gutter); }
-.page-main { max-width: 720px; margin: clamp(20px, 5vw, 56px) auto 72px; padding: 0 var(--gutter); }
-.page-main.is-wide { max-width: 1100px; }
-.status-card { padding: clamp(20px, 4vw, 36px); border: 1px solid var(--line); border-radius: 22px; background: var(--wine); color: var(--text); }
-.status-card h1 { margin-bottom: 14px; font: 300 clamp(2.2rem, 5vw, 3.2rem)/1.05 var(--serif); color: var(--text); }
-.status-card h1 em { font-style: italic; color: var(--rose); }
-.status-card > p { margin-top: 12px; color: var(--text); opacity: 0.85; }
-
-/* ---------- Admin ---------- */
-.admin-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; margin-bottom: 24px; }
-.admin-top h1 { font: 300 clamp(1.9rem, 4vw, 2.8rem)/1 var(--serif); color: var(--text); }
-.admin-tabs { display: flex; gap: 6px; }
-.admin-tabs button { padding: 0.6em 1.15em; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--text); font-size: 0.78rem; letter-spacing: 0.1em; }
-.admin-tabs button.is-on { background: var(--rose); border-color: var(--rose); color: var(--ink); }
-.admin-day { margin-top: 28px; }
-.admin-day h2 { margin-bottom: 12px; font: 400 1.4rem var(--serif); color: var(--rose); }
-.admin-card { display: grid; gap: 12px; margin-bottom: 10px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--wine); }
-.admin-card.is-off { opacity: 0.55; }
-.admin-time { font: 400 1.6rem/1 var(--serif); color: var(--text); }
-.admin-info a { text-decoration: underline; text-underline-offset: 0.2em; }
-.admin-info p { margin-top: 4px; font-size: 0.9rem; color: var(--muted); }
-.admin-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.admin-note { font-style: italic; color: var(--muted); }
-.admin-actions { display: flex; flex-wrap: wrap; gap: 8px; align-content: start; }
-.admin-actions button { padding: 0.55em 1em; border: 1px solid var(--rose-deep); border-radius: 999px; background: none; color: var(--text); font-size: 0.78rem; transition: background 0.3s, color 0.3s; }
-.admin-actions button:hover { background: var(--rose); color: var(--ink); }
-.admin-actions .is-quiet { border-color: var(--line); color: var(--muted); }
-.admin-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 14px; margin-bottom: 20px; }
-.admin-inline .field { flex: 1 1 200px; }
-.admin-inline .btn { margin-bottom: 14px; }
-@media (min-width: 760px) {
-  .admin-card { grid-template-columns: 110px 1fr auto; gap: 20px; align-items: start; }
-}

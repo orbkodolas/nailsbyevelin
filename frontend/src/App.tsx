@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRoute, type Route } from './lib/useRoute'
-import { ScrollTrigger, getLenis, initSmoothScroll, scrollToTarget } from './lib/motion'
+import { ScrollTrigger, initSmoothScroll, scrollToTarget } from './lib/motion'
 import { useScrollEffects } from './lib/useScrollEffects'
 import { openBooking } from './lib/bookingModal'
 import { Header } from './components/Header'
@@ -18,7 +18,6 @@ import { Booking } from './components/Booking'
 import { Footer } from './components/Footer'
 import { ManageBooking } from './pages/ManageBooking'
 import { VoucherThanks } from './pages/VoucherThanks'
-import { Admin } from './pages/Admin'
 
 function Home() {
   const root = useRef<HTMLDivElement>(null)
@@ -86,25 +85,14 @@ export default function App() {
     return () => document.removeEventListener('click', onClick)
   }, [])
 
-  // Az admin külön oldal: váltáskor az oldal tetejére (a modálos útvonalak nem görgetnek)
-  const prevName = useRef(route.name)
-  useEffect(() => {
-    const prev = prevName.current
-    prevName.current = route.name
-    if (route.name !== 'admin' && prev !== 'admin') return
-    const lenis = getLenis()
-    if (lenis) lenis.scrollTo(0, { immediate: true }); else window.scrollTo(0, 0)
-  }, [route.name])
-
   return (
     <>
-      {route.name !== 'admin' && <Home />}
+      <Home />
       <BookingModal />
       <Modal open={isOverlay} onClose={closeRoute} title={overlay?.name === 'voucher-thanks' ? 'Ajándékutalvány' : 'A foglalásod'}>
         {overlay?.name === 'manage' && <ManageBooking id={overlay.id} token={overlay.token} query={overlay.query} />}
         {overlay?.name === 'voucher-thanks' && <VoucherThanks />}
       </Modal>
-      {route.name === 'admin' && <Admin />}
     </>
   )
 }

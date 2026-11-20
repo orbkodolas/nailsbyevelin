@@ -21,7 +21,6 @@ export function Footer() {
       <div className="footer-bottom">
         <span>© {YEAR} Nails by Evelin</span>
         <span>A foglaláshoz megadott adataidat kizárólag a foglalás intézéséhez használom.</span>
-        <a href="#/admin" className="footer-admin">Admin</a>
       </div>
     </footer>
   )

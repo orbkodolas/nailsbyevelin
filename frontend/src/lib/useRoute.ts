@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react'
 export type Route =
   | { name: 'home' }
   | { name: 'manage'; id: string; token: string; query: URLSearchParams }
-  | { name: 'admin' }
   | { name: 'voucher-thanks' }
 
 export function parseRoute(hash: string): Route {
@@ -11,7 +10,6 @@ export function parseRoute(hash: string): Route {
   const [path, search = ''] = hash.slice(1).split('?')
   const parts = path.split('/').filter(Boolean)
   if (parts[0] === 'foglalas' && parts[1] && parts[2]) return { name: 'manage', id: parts[1], token: parts[2], query: new URLSearchParams(search) }
-  if (parts[0] === 'admin') return { name: 'admin' }
   if (parts[0] === 'utalvany') return { name: 'voucher-thanks' }
   return { name: 'home' }
 }

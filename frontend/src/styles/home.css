@@ -171,7 +171,6 @@ section { position: relative; }
 .footer-contact { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); color: var(--muted); }
 .footer-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-5); font-size: 0.8rem; color: var(--muted); }
 .footer-bottom svg { display: inline-block; width: 0.8em; height: 0.8em; margin-right: 6px; color: var(--rose); }
-.footer-admin { opacity: 0.5; }
 @media (min-width: 900px) {
   .footer-top { grid-template-columns: 1.5fr 1fr; align-items: end; }
   .footer-word { grid-column: 1 / -1; }
