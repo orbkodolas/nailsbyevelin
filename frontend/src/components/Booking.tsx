@@ -194,7 +194,7 @@ function Done({ booking, emailEnabled }: { booking: CreatedBooking; emailEnabled
   const [copied, setCopied] = useState(false)
   const payment = booking.payment
   const waiting = booking.status === 'pending_payment'
-  const manageUrl = `${window.location.origin}/#/foglalas/${booking.id}/${booking.manageToken}`
+  const manageUrl = `${window.location.origin}${import.meta.env.BASE_URL}#/foglalas/${booking.id}/${booking.manageToken}`
   const copy = async () => { try { await navigator.clipboard.writeText(manageUrl); setCopied(true) } catch { /* a link lent látható */ } }
 
   return (
