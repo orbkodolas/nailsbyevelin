@@ -207,7 +207,7 @@ function Done({ booking, emailEnabled }: { booking: CreatedBooking; emailEnabled
       {payment?.instructions && <p className="notice" data-done>{payment.instructions}<br />Fizetendő: <b>{forint(payment.amountHuf)}</b></p>}
       {payment?.error && <p className="notice" data-done>A fizetési oldal most nem érhető el. A foglalásod linkjén később újra megpróbálhatod.</p>}
       <div className="done-link" data-done>
-        <p>{emailEnabled ? 'A linket e-mailben is elküldtem. Itt tudod megerősíteni vagy lemondani az időpontot:' : 'Mentsd el ezt a linket: itt tudod megerősíteni vagy lemondani az időpontot.'}</p>
+        <p>{emailEnabled ? 'A linket e-mailben is elküldtem. Itt tudod követni vagy lemondani az időpontot:' : 'Mentsd el ezt a linket: itt tudod követni vagy lemondani az időpontot.'}</p>
         <a href={manageUrl}>{manageUrl}</a>
         <button type="button" className="btn-link" onClick={copy}>{copied ? 'Kimásolva' : 'Link másolása'}</button>
       </div>

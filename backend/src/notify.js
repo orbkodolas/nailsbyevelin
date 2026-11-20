@@ -57,7 +57,7 @@ export function createNotifier({ config, fetchImpl, log = console }) {
         `${booking.serviceName}`, when(booking), '',
       ]
       if (waiting) lines.push(`Fizetendő: ${forint(booking.amountDueHuf)}`, '')
-      lines.push('Itt tudod megerősíteni vagy lemondani (egy üzenet is elég, ha nem tudsz jönni):', manageUrl(booking), '',
+      lines.push((waiting ? 'Itt tudod követni vagy lemondani az időpontot (egy üzenet is elég, ha nem tudsz jönni):' : 'Itt tudod megerősíteni vagy lemondani (egy üzenet is elég, ha nem tudsz jönni):'), manageUrl(booking), '',
         'Kérlek, pontosan érkezz, és kísérő nélkül gyere. Egy szett legalább 2 órát vesz igénybe.', signoff)
       return sendMail({ to: booking.email, subject: waiting ? 'Időpont – fizetésre vár' : 'Időpontod rögzítve', text: lines.join('\n') })
     },
@@ -67,7 +67,7 @@ export function createNotifier({ config, fetchImpl, log = console }) {
       const text = [
         `Szia ${booking.name.split(' ')[0]}!`, '',
         early ? `Holnapra szól az időpontod: ${when(booking)}.` : `Hamarosan várlak: ${when(booking)}.`, '',
-        early ? 'Kérlek, erősítsd meg, hogy jössz, vagy mondd le, ha nem tudsz. Így másnak tovább tudom adni az időt.' : 'Ha mégsem tudsz eljönni, kérlek, szólj még most.',
+        early ? (booking.confirmationStatus === 'confirmed' ? 'Ha mégsem tudsz jönni, kérlek, mondd le minél előbb, így másnak tovább tudom adni az időt.' : 'Kérlek, erősítsd meg, hogy jössz, vagy mondd le, ha nem tudsz. Így másnak tovább tudom adni az időt.') : 'Ha mégsem tudsz eljönni, kérlek, szólj még most.',
         manageUrl(booking), signoff,
       ].join('\n')
       return sendMail({ to: booking.email, subject: early ? 'Holnapi időpontod – megerősítés' : 'Ma várlak!', text })

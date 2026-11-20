@@ -139,6 +139,8 @@ export function createApp(options = {}) {
     booking.status = 'booked'
     booking.paymentStatus = 'paid'
     booking.amountPaidHuf = booking.amountDueHuf
+    booking.confirmationStatus = 'confirmed' // a kifizetett foglaló egyben megerősítés is
+    booking.confirmedAt = now().toISOString()
     booking.paidAt = now().toISOString()
     delete booking.holdExpiresAt
     for (const feeId of booking.feeBookingIds || []) {

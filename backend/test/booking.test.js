@@ -212,6 +212,7 @@ test('Demó fizetés: rossz kártya elutasítva, a 4242-es véglegesíti az idő
     assert.equal(ok.headers.get('location'), 'https://site.test/app') // idegen címre nem irányít át
     const paid = await (await call('GET', `/api/bookings/${booking.id}?token=${booking.manageToken}`)).json()
     assert.equal(paid.status, 'booked')
+    assert.equal(paid.confirmationStatus, 'confirmed') // külön megerősítés nem kell
     await app.idle()
   })
 })
