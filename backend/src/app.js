@@ -16,6 +16,25 @@ const json = (res, status, value, headers = {}) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...headers })
   res.end(JSON.stringify(value))
 }
+const html = (res, status, body) => { res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }); res.end(body) }
+const esc = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
+function demoPage({ payment, back = '', error = '', message = '' }) {
+  const amount = payment ? `${new Intl.NumberFormat('hu-HU').format(payment.amountHuf)} Ft` : ''
+  return `<!doctype html><html lang="hu"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demó fizetés</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#1a0b12;font:16px/1.5 system-ui,sans-serif;color:#2a1119}
+main{width:min(92vw,400px);background:#fdf5f2;border-radius:18px;padding:28px}h1{font:600 26px Georgia,serif;margin:0 0 4px}
+.demo{background:#f6dfe3;border-radius:10px;padding:10px 12px;font-size:14px;margin:14px 0}
+label{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-top:14px}
+input{width:100%;box-sizing:border-box;padding:12px;border:1px solid #d6aab3;border-radius:10px;font-size:16px;background:#fff}
+.row{display:flex;gap:10px}button{width:100%;margin-top:20px;padding:14px;border:0;border-radius:99px;background:#6b1d34;color:#fff;font-size:16px;cursor:pointer}
+.err{color:#9b1c2e;margin-top:12px}a{color:#6b1d34}</style>
+<main><h1>Nails by Evelin</h1>${message ? `<p>${esc(message)}</p>` : `<div>Fizetendő: <strong>${amount}</strong></div>
+<div class="demo">Demó fizetés, nem történik valódi terhelés. Elfogadott kártya: <b>4242 4242 4242 4242</b>, bármilyen jövőbeli lejárat és CVC. Elutasított: 4000 0000 0000 0002.</div>
+<form method="post"><input type="hidden" name="return" value="${esc(back)}">
+<label>Kártyaszám<input name="card" inputmode="numeric" autocomplete="off" placeholder="4242 4242 4242 4242" value="4242 4242 4242 4242"></label>
+<div class="row"><label>Lejárat<input name="exp" placeholder="12/30" value="12/30"></label><label>CVC<input name="cvc" placeholder="123" value="123"></label></div>
+${error ? `<div class="err">${esc(error)}</div>` : ''}<button>Fizetés ${amount}</button></form><p><a href="${esc(back)}">Mégsem, vissza</a></p>`}</main></html>`
+}
 const httpError = (status, message) => Object.assign(new Error(message), { status })
 const normalizePhone = (value) => {
   const compact = value.replace(/[\s().-]/g, '')
@@ -140,6 +159,20 @@ export function createApp(options = {}) {
     } else if (result.booking) {
       background(notifier.notifyOwner(`Visszatérítés szükséges – ${result.booking.name}`, { booking: result.booking.id, reason: 'Fizetés a hold lejárta után érkezett, az időpont már foglalt.' }))
     }
+  }
+
+  // Szolgáltatói esemény (webhook vagy demó fizetés) rögzítése
+  async function settle(providerId, event) {
+    const settled = await store.update((state) => {
+      const payment = state.payments.find((item) => (event.paymentId ? item.id === event.paymentId : item.orderRef === event.orderRef) && item.provider === providerId)
+      if (!payment || ['paid', 'amount_mismatch'].includes(payment.status)) return null
+      if (event.status === 'failed') { payment.status = 'failed'; return null }
+      if (event.status !== 'paid') return null
+      if (event.amountHuf !== undefined && event.amountHuf !== payment.amountHuf) { payment.status = 'amount_mismatch'; return null }
+      payment.status = 'paid'; payment.paidAt = now().toISOString()
+      return applyPaid(state, payment)
+    })
+    afterPaid(settled)
   }
 
   // Fizetés indítása a kiválasztott szolgáltatónál
@@ -355,6 +388,24 @@ export function createApp(options = {}) {
         return json(res, 201, { id: voucher.id, status: voucher.status, amountHuf: voucher.amountHuf, payment })
       }
 
+      // ----- demó fizetőoldal (kamu kártya) -----
+      const demoPay = path.match(/^\/demo-pay\/([\w-]+)$/)
+      if (demoPay && config.demoPayments && ['GET', 'POST'].includes(req.method)) {
+        const payment = (await store.update((state) => state.payments.find((item) => item.id === demoPay[1] && item.provider === 'demo'))) || null
+        if (!payment) return html(res, 404, demoPage({ message: 'Ismeretlen fizetés.' }))
+        const form = new URLSearchParams(req.method === 'POST' ? await readRaw(req) : '')
+        const back = (form.get('return') || url.searchParams.get('return') || '')
+        const safeBack = back.startsWith(config.publicUrl) ? back : config.publicUrl
+        if (req.method === 'GET') return html(res, 200, demoPage({ payment, back: safeBack }))
+        const digits = (form.get('card') || '').replace(/\D/g, '')
+        if (payment.status === 'paid' || digits === '4242424242424242') {
+          await settle('demo', { paymentId: payment.id, status: 'paid', amountHuf: payment.amountHuf })
+          res.writeHead(303, { location: safeBack }); return res.end()
+        }
+        const declined = digits === '4000000000000002'
+        return html(res, 200, demoPage({ payment, back: safeBack, error: declined ? 'A kártyát elutasították (teszt).' : 'Demó módban csak a 4242 4242 4242 4242 kártya fogadható el.' }))
+      }
+
       // ----- fizetési szolgáltatók visszahívása -----
       const webhook = path.match(/^\/api\/payments\/webhook\/(\w+)$/)
       if (webhook && ['GET', 'POST'].includes(req.method)) {
@@ -364,16 +415,7 @@ export function createApp(options = {}) {
         const event = await provider.parseWebhook({ rawBody, headers: req.headers, query: url.searchParams })
         if (event.status === 'invalid') return json(res, 400, { error: 'invalid_signature' })
         if (event.paymentId || event.orderRef) {
-          const settled = await store.update((state) => {
-            const payment = state.payments.find((item) => (event.paymentId ? item.id === event.paymentId : item.orderRef === event.orderRef) && item.provider === webhook[1])
-            if (!payment || ['paid', 'amount_mismatch'].includes(payment.status)) return null
-            if (event.status === 'failed') { payment.status = 'failed'; return null }
-            if (event.status !== 'paid') return null
-            if (event.amountHuf !== undefined && event.amountHuf !== payment.amountHuf) { payment.status = 'amount_mismatch'; return null }
-            payment.status = 'paid'; payment.paidAt = now().toISOString()
-            return applyPaid(state, payment)
-          })
-          afterPaid(settled)
+          await settle(webhook[1], event)
         }
         const reply = provider.webhookReply?.(rawBody)
         return reply ? (res.writeHead(200, { 'content-type': 'application/json', ...reply.headers }), res.end(reply.body)) : json(res, 200, { ok: true })

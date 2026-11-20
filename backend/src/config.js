@@ -42,6 +42,7 @@ export function loadConfig(env = process.env, overrides = {}) {
 
     // Fizetés: PAYMENT_PROVIDERS=stripe,barion,simplepay (az első az alapértelmezett); a "manual" mindig elérhető
     paymentProviders: (env.PAYMENT_PROVIDERS || '').split(',').map((item) => item.trim()).filter(Boolean),
+    demoPayments: env.DEMO_PAYMENTS === '1', // kamu kártyás fizetőoldal teszteléshez; éles üzemben ne kapcsold be
     bankTransferInfo: env.BANK_TRANSFER_INFO || '',
     stripe: { secretKey: env.STRIPE_SECRET_KEY || '', webhookSecret: env.STRIPE_WEBHOOK_SECRET || '' },
     barion: {

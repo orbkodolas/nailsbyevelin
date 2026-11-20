@@ -196,3 +196,22 @@ test('a böngésző dátumot és helyi időt küldhet; a szerver váltja át', a
   assert.equal(response.status, 201)
   assert.equal((await response.json()).startsAt, '2026-11-24T08:00:00.000Z')
 }))
+
+test('Demó fizetés: rossz kártya elutasítva, a 4242-es véglegesíti az időpontot', async () => {
+  await withApi({ config: { depositPercent: 30, paymentProviders: ['demo'], demoPayments: true, publicUrl: 'https://site.test/app', apiUrl: 'http://api.test' } }, async ({ call, base, app }) => {
+    const booking = await (await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-11-24', '09:00') }))).json()
+    assert.equal(booking.payment.provider, 'demo')
+    const path = new URL(booking.payment.checkoutUrl).pathname
+    const page = await fetch(`${base}${path}?return=${encodeURIComponent('https://site.test/app/#/x')}`)
+    assert.equal(page.status, 200)
+    const pay = (card, back = 'https://site.test/app/#/x') => fetch(`${base}${path}`, { method: 'POST', redirect: 'manual', body: new URLSearchParams({ card, return: back }) })
+    assert.equal((await pay('4000 0000 0000 0002')).status, 200)
+    assert.equal((await (await call('GET', `/api/bookings/${booking.id}?token=${booking.manageToken}`)).json()).status, 'pending_payment')
+    const ok = await pay('4242 4242 4242 4242', 'https://evil.example/')
+    assert.equal(ok.status, 303)
+    assert.equal(ok.headers.get('location'), 'https://site.test/app') // idegen címre nem irányít át
+    const paid = await (await call('GET', `/api/bookings/${booking.id}?token=${booking.manageToken}`)).json()
+    assert.equal(paid.status, 'booked')
+    await app.idle()
+  })
+})

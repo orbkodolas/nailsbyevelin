@@ -140,6 +140,16 @@ function simplepayProvider({ config, fetchImpl, now }) {
   }
 }
 
+// Demó fizetés: a saját /demo-pay oldalunk, kamu kártyaadatokkal (csak DEMO_PAYMENTS=1 mellett).
+const demoProvider = ({ config }) => ({
+  label: 'Bankkártya (demó)',
+  ready: Boolean(config.demoPayments),
+  async createCheckout({ payment, returnUrl }) {
+    return { providerRef: null, url: `${config.apiUrl}/demo-pay/${payment.id}?${new URLSearchParams({ return: returnUrl })}` }
+  },
+  async parseWebhook() { return { status: 'ignored' } },
+})
+
 // Kézi fizetés: átutalás vagy egyeztetés Evelinnel; az admin igazolja vissza.
 const manualProvider = ({ config }) => ({
   label: 'Átutalás / egyeztetés Evelinnel',
@@ -154,7 +164,7 @@ const manualProvider = ({ config }) => ({
 })
 
 export function createPayments(context) {
-  const all = { stripe: stripeProvider(context), barion: barionProvider(context), simplepay: simplepayProvider(context), manual: manualProvider(context) }
+  const all = { stripe: stripeProvider(context), barion: barionProvider(context), simplepay: simplepayProvider(context), demo: demoProvider(context), manual: manualProvider(context) }
   const enabled = context.config.paymentProviders.filter((id) => all[id]?.ready && id !== 'manual')
   const order = [...enabled, 'manual']
   return {
