@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native'
 import { api, ApiError, errorText, saveToken } from '../api'
-import { c, s } from '../theme'
+import { c, f, s } from '../theme'
 import { Button } from '../ui'
 
 export function Login({ onDone }: { onDone: () => void }) {
@@ -26,8 +26,8 @@ export function Login({ onDone }: { onDone: () => void }) {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[s.screen, { justifyContent: 'center', padding: 24 }]}>
-      <View style={{ gap: 16 }}>
-        <Text style={{ color: c.rose, fontSize: 34, fontWeight: '300' }}>Nails by Evelin</Text>
+      <View style={{ gap: 16, width: '100%', maxWidth: 440, alignSelf: 'center' }}>
+        <Text style={{ color: c.rose, fontSize: 44, fontFamily: f.serif, lineHeight: 50 }}>Nails <Text style={{ fontFamily: f.serifItalic }}>by</Text> Evelin</Text>
         <Text style={s.muted}>Admin – add meg a belépési kulcsot. Egyszer kell, utána a telefon megjegyzi.</Text>
         <TextInput style={s.input} value={value} onChangeText={setValue} placeholder="Belépési kulcs" placeholderTextColor={c.muted}
           autoCapitalize="none" autoCorrect={false} secureTextEntry onSubmitEditing={submit} />

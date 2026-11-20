@@ -181,6 +181,30 @@ test('admin blokk elveszi a szabad idősávokat; admin végpontok tokent kérnek
   assert.ok(availability.days['2026-11-25'].length > 0)
 }))
 
+test('szabadnap foglalás alatt: 409 a foglalások listájával, force-szal letiltható', async () => withApi({}, async ({ call }) => {
+  assert.equal((await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-11-25', '10:00') }))).status, 201)
+  const refused = await call('POST', '/api/admin/blocks', { date: '2026-11-25', reason: 'Szabadnap' }, admin)
+  assert.equal(refused.status, 409)
+  const body = await refused.json()
+  assert.equal(body.error, 'block_has_bookings')
+  assert.equal(body.bookings.length, 1)
+  assert.equal((await (await call('GET', '/api/admin/bookings', undefined, admin)).json()).blocks.length, 0)
+  const forced = await call('POST', '/api/admin/blocks', { date: '2026-11-25', reason: 'Sürgős szabadnap', force: true }, admin)
+  assert.equal(forced.status, 201)
+  assert.equal((await forced.json()).urgent, true)
+  const [booking] = (await (await call('GET', '/api/admin/bookings', undefined, admin)).json()).bookings
+  const cancelled = await (await call('POST', `/api/admin/bookings/${booking.id}/cancel`, { reason: 'urgent_block' }, admin)).json()
+  assert.equal(cancelled.cancelReason, 'urgent_block')
+  assert.equal(cancelled.cancelledBy, 'admin')
+}))
+
+test('lemondott, előleges foglalás: visszautalás kézzel, admin megjelöli', async () => withApi({}, async ({ call }) => {
+  const created = await (await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-11-26', '10:00') }))).json()
+  const id = created.id ?? created.booking?.id
+  assert.ok(id)
+  assert.equal((await call('POST', `/api/admin/bookings/${id}/refunded`, {}, admin)).status, 409)
+}))
+
 test('Evelin e-mail értesítést kap új foglalásról és késői lemondásról (FormSubmit)', async () => {
   const calls = []
   const fetchImpl = async (...args) => { calls.push(args); return new Response('{"success":"true"}', { status: 200 }) }
@@ -244,4 +268,24 @@ test('Demó fizetés JSON végpont: elutasított és hibás kártya, a 4242 vég
     assert.equal((await fetch(`${base}/api/payments/demo/nincs-ilyen`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 404)
     await app.idle()
   })
+})
+
+test('csak 14 napra előre lehet foglalni; az API és a foglalás is elutasítja a későbbit', async () => withApi({ maxDaysAhead: 14 }, async ({ call }) => {
+  // START = 2026-11-23 (hétfő) 09:00 helyi; az utolsó foglalható nap 2026-12-07 (hétfő)
+  const days = await (await call('GET', '/api/availability?serviceId=gel-egyszinu&from=2026-11-23&to=2027-01-20')).json()
+  const dates = Object.keys(days.days)
+  assert.equal(dates.at(-1), '2026-12-07')
+  assert.ok(days.days['2026-12-07'].length > 0)
+  const late = await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-12-08', '09:00') }))
+  assert.equal(late.status, 409)
+  const ok = await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-12-07', '09:00') }))
+  assert.equal(ok.status, 201)
+}))
+
+test('szünnapok: karácsony, szilveszter és újév nem foglalható', () => {
+  const config = { workingHours: { 1: [['09:00', '18:00']], 2: [['09:00', '18:00']], 3: [['09:00', '18:00']], 4: [['09:00', '18:00']], 5: [['09:00', '18:00']], 6: [['09:00', '14:00']] }, slotStepMinutes: 30, bufferMinutes: 0, minLeadMinutes: 60, maxDaysAhead: 60, timezone: 'Europe/Budapest', closedDays: ['12-24', '12-25', '12-26', '12-31', '01-01'] }
+  const now = new Date('2026-12-20T08:00:00.000Z')
+  for (const date of ['2026-12-24', '2026-12-25', '2026-12-26', '2026-12-31', '2027-01-01']) assert.deepEqual(slotsForDate({ date, durationMinutes: 60, busy: [], config, now }), [], date)
+  assert.ok(slotsForDate({ date: '2026-12-23', durationMinutes: 60, busy: [], config, now }).length > 0)
+  assert.ok(slotsForDate({ date: '2027-01-04', durationMinutes: 60, busy: [], config, now }).length > 0)
 })

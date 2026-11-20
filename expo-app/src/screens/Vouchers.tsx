@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Alert, FlatList, RefreshControl, Text, TextInput, View } from 'react-native'
+import { FlatList, RefreshControl, Text, TextInput, View } from 'react-native'
+import { Banknote, Gift, Search } from 'lucide-react-native'
 import { errorText, getVouchers, Voucher, voucherAction } from '../api'
-import { c, fmtDate, huf, s } from '../theme'
-import { Badge, Button, confirm } from '../ui'
+import { c, f, fmtDateShort as fmtDate, huf, s } from '../theme'
+import { Badge, Button, confirm, notice, useLayout } from '../ui'
 import { useLoad } from '../useLoad'
 
 function status(v: Voucher): [string, string] {
@@ -11,9 +12,11 @@ function status(v: Voucher): [string, string] {
 }
 
 export function Vouchers({ onUnauthorized }: { onUnauthorized: () => void }) {
-  const { data, error, refreshing, reload } = useLoad(getVouchers, onUnauthorized)
+  const { data, error, refreshing, reload, mutate } = useLoad(getVouchers, onUnauthorized, 10 * 60_000)
   const [query, setQuery] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
+  const { gutter, width } = useLayout()
+  const columns = width >= 1100 ? 3 : width >= 700 ? 2 : 1
 
   const q = query.trim().toUpperCase()
   const vouchers = (data?.vouchers ?? []).filter((v) => !q || v.code.includes(q) || v.buyerName.toUpperCase().includes(q) || v.recipientName.toUpperCase().includes(q))
@@ -24,22 +27,30 @@ export function Vouchers({ onUnauthorized }: { onUnauthorized: () => void }) {
       : await confirm('Fizetés megerősítése', `${v.buyerName} befizette a(z) ${huf(v.amountHuf)} összeget?`)
     if (!ok) return
     setBusyId(v.id)
-    try { await voucherAction(v.id, action); await reload() }
-    catch (e) { Alert.alert('Nem sikerült', errorText(e)) }
+    try {
+      const updated = await voucherAction(v.id, action)
+      mutate((d) => ({ ...d, vouchers: d.vouchers.map((x) => (x.id === v.id ? { ...x, ...updated } : x)) }))
+    } catch (e) { notice('Nem sikerült', errorText(e), 'danger') }
     finally { setBusyId(null) }
   }
 
   return (
     <FlatList
+      key={columns}
+      numColumns={columns}
       style={s.screen}
-      contentContainerStyle={s.list}
+      contentContainerStyle={{ padding: gutter, paddingBottom: 32, gap: 12, width: '100%', maxWidth: 1240, alignSelf: 'center' }}
+      columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined}
       data={vouchers}
       keyExtractor={(v) => v.id}
       keyboardShouldPersistTaps="handled"
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} tintColor={c.rose} colors={[c.rose]} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={reload} tintColor={c.rose} colors={[c.rose]} progressBackgroundColor={c.card} />}
       ListHeaderComponent={
         <View style={{ gap: 8 }}>
-          <TextInput style={s.input} value={query} onChangeText={setQuery} placeholder="Keresés kódra vagy névre" placeholderTextColor={c.muted} autoCapitalize="characters" autoCorrect={false} />
+          <View style={[s.input, { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 0 }]}>
+            <Search size={18} color={c.muted} strokeWidth={1.8} />
+            <TextInput style={{ flex: 1, color: c.text, fontFamily: f.sans, fontSize: 16, paddingVertical: 12 }} value={query} onChangeText={setQuery} placeholder="Keresés kódra vagy névre" placeholderTextColor={c.muted} autoCapitalize="characters" autoCorrect={false} />
+          </View>
           {error && <Text style={{ color: c.danger }}>{error}</Text>}
         </View>
       }
@@ -48,17 +59,18 @@ export function Vouchers({ onUnauthorized }: { onUnauthorized: () => void }) {
         const [label, color] = status(v)
         const expired = label === 'Lejárt'
         return (
-          <View style={s.card}>
+          <View style={[s.card, { flex: 1 / columns }]}>
             <View style={[s.row, { justifyContent: 'space-between' }]}>
-              <Text style={[s.title, { letterSpacing: 1 }]}>{v.code}</Text>
+              <View style={[s.row, { gap: 10 }]}><Gift size={18} color={c.rose} strokeWidth={1.8} /><Text style={[s.title, { letterSpacing: 1 }]}>{v.code}</Text></View>
               <Badge label={label} color={color} />
             </View>
-            <Text style={s.text}>{huf(v.amountHuf)}{v.recipientName ? ` · ${v.recipientName} részére` : ''}</Text>
+            <Text style={[s.h2, { fontSize: 26 }]}>{huf(v.amountHuf)}</Text>
+            <Text style={s.text}>{v.recipientName ? `${v.recipientName} részére` : 'Ajándékutalvány'}</Text>
             <Text style={s.muted}>Vásárló: {v.buyerName} · {v.buyerEmail}</Text>
             <Text style={s.muted}>Vásárolva: {fmtDate(v.createdAt)}{v.expiresAt ? ` · érvényes: ${fmtDate(v.expiresAt)}-ig` : ''}</Text>
             <View style={[s.row, { marginTop: 4 }]}>
-              {v.status === 'pending_payment' && <Button label="Fizetés megjött" busy={busyId === v.id} onPress={() => run(v, 'payment-confirmed')} />}
-              {v.status === 'active' && !expired && <Button label="Beváltás" busy={busyId === v.id} onPress={() => run(v, 'redeem')} />}
+              {v.status === 'pending_payment' && <Button small icon={Banknote} label="Fizetés megjött" busy={busyId === v.id} onPress={() => run(v, 'payment-confirmed')} />}
+              {v.status === 'active' && !expired && <Button small icon={Gift} label="Beváltás" busy={busyId === v.id} onPress={() => run(v, 'redeem')} />}
             </View>
           </View>
         )

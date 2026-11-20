@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { catalog, durationLabel, forint } from '../lib/catalog'
 import { ApiError, createBooking, getAvailability, getBooking, getSettings, type Availability, type CreatedBooking, type PaymentMethod } from '../lib/api'
 import { MONTHS, WEEKDAYS, addDays, formatDateTime, formatLongDate, formatWhen, monthGrid, todayString } from '../lib/dates'
@@ -40,6 +41,7 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [emailEnabled, setEmailEnabled] = useState(false)
   const [deposit, setDeposit] = useState(0)
+  const [maxDays, setMaxDays] = useState(14)
   const [paymentMethod, setPaymentMethod] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -52,7 +54,7 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
 
   useEffect(() => {
     getSettings().then((settings) => {
-      setMethods(settings.paymentMethods); setEmailEnabled(settings.emailEnabled); setDeposit(settings.depositPercent)
+      setMethods(settings.paymentMethods); setEmailEnabled(settings.emailEnabled); setDeposit(settings.depositPercent); if (settings.maxDaysAhead > 0) setMaxDays(settings.maxDaysAhead)
       setPaymentMethod(settings.paymentMethods[0]?.id ?? '')
     }).catch(() => {})
   }, [])
@@ -60,11 +62,11 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
   const loadAvailability = useCallback(() => {
     setLoading(true); setLoadError('')
     const today = todayString()
-    getAvailability(category.items[0].id, today, addDays(today, 61))
+    getAvailability(category.items[0].id, today, addDays(today, maxDays))
       .then(setAvailability)
       .catch((reason: unknown) => { setAvailability(null); setLoadError(reason instanceof Error ? reason.message : 'Nem sikerült betölteni az időpontokat.') })
       .finally(() => setLoading(false))
-  }, [category])
+  }, [category, maxDays])
   useEffect(() => { loadAvailability() }, [loadAvailability])
 
   const grid = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor])
@@ -156,9 +158,9 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
               ) : (
                 <div className="calendar" aria-busy={loading}>
                   <div className="calendar-nav">
-                    <button type="button" onClick={() => shiftMonth(-1)} disabled={!canGoBack} aria-label="Előző hónap">←</button>
+                    <button type="button" onClick={() => shiftMonth(-1)} disabled={!canGoBack} aria-label="Előző hónap"><ChevronLeft size={20} strokeWidth={1.5} aria-hidden="true" /></button>
                     <b>{cursor.year}. {MONTHS[cursor.month]}</b>
-                    <button type="button" onClick={() => shiftMonth(1)} disabled={!canGoForward} aria-label="Következő hónap">→</button>
+                    <button type="button" onClick={() => shiftMonth(1)} disabled={!canGoForward} aria-label="Következő hónap"><ChevronRight size={20} strokeWidth={1.5} aria-hidden="true" /></button>
                   </div>
                   <div className="calendar-grid" role="grid">
                     {WEEKDAYS.map((weekday, index) => <span key={index} className="weekday">{weekday}</span>)}
@@ -168,6 +170,7 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
                     ))}
                   </div>
                   {!loading && availability && !monthHasSlots && <p className="hint">Ebben a hónapban nincs szabad időpont.</p>}
+                  <p className="hint">Időpontot legfeljebb {maxDays} napra előre lehet foglalni.</p>
                 </div>
               )}
               {date && (
@@ -221,7 +224,8 @@ function Confirmed({ booking }: { booking: CreatedBooking }) {
     <div className="done done-confirmed">
       <p className="eyebrow" data-done><span className="eyebrow-line" />Rögzítettem</p>
       <h3 data-done>Időpontod rögzítve lett!</h3>
-      <p className="done-when" data-done>{booking.serviceName} • {forint(booking.priceHuf)}</p>
+      <p className="done-when" data-done>{booking.serviceName} • <span className="done-price">{forint(Math.max(0, booking.priceHuf - booking.amountPaidHuf))}</span></p>
+      {booking.amountPaidHuf > 0 && <p className="done-small done-note" data-done>Az előleg ({forint(booking.amountPaidHuf)}) már levonva, ennyit fizetsz a helyszínen.</p>}
       <p data-done>Köszönöm a bizalmad!<br />Szeretettel várlak ekkor: <b>{date} {time}</b></p>
       <p data-done>Kérlek, ne hozz magaddal senkit, hacsak nem egymás után van időpontotok. Kérlek, ne késs — legfeljebb 15 perces késést tudok tolerálni, azon felül sajnos már nem foglak tudni fogadni.</p>
       <p className="done-small" data-done>Ha le szeretnéd mondani az időpontod, azt megteheted az e-mail címedre küldött levélben, az „Időpont lemondása” gombra kattintva.</p>

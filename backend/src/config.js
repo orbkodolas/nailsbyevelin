@@ -25,7 +25,9 @@ export function loadConfig(env = process.env, overrides = {}) {
     slotStepMinutes: num(env.SLOT_STEP_MINUTES, 30),
     bufferMinutes: num(env.BUFFER_MINUTES, 15),
     minLeadMinutes: num(env.MIN_LEAD_MINUTES, 60),
-    maxDaysAhead: num(env.MAX_DAYS_AHEAD, 60),
+    maxDaysAhead: num(env.MAX_DAYS_AHEAD, 14),
+    // Évente ismétlődő szünnapok HH-NN formában (karácsony, szilveszter, újév); CLOSED_DAYS=12-24,12-25 felülírja
+    closedDays: env.CLOSED_DAYS !== undefined ? env.CLOSED_DAYS.split(',').map((item) => item.trim()).filter(Boolean) : ['12-24', '12-25', '12-26', '12-31', '01-01'],
     maxActiveBookingsPerGuest: num(env.MAX_ACTIVE_BOOKINGS_PER_GUEST, 2),
 
     // Foglalási szabályok

@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { gzipSync } from 'node:zlib'
 import { createStore } from './store.js'
 import { createPgStore } from './store-pg.js'
 import { catalog, findService, services, publicRules } from './catalog.js'
@@ -14,8 +15,14 @@ const INACTIVE = ['cancelled', 'rejected', 'expired', 'no_show', 'completed']
 const VOUCHER_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 const json = (res, status, value, headers = {}) => {
+  const body = JSON.stringify(value)
+  // Nagy listáknál (admin foglalások) a gzip töredékére csökkenti a letöltést
+  if (body.length > 2048 && /\bgzip\b/.test(res.req?.headers['accept-encoding'] ?? '')) {
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-encoding': 'gzip', vary: 'Accept-Encoding', ...headers })
+    return res.end(gzipSync(body))
+  }
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...headers })
-  res.end(JSON.stringify(value))
+  res.end(body)
 }
 const html = (res, status, body) => { res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }); res.end(body) }
 const esc = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
@@ -230,7 +237,7 @@ export function createApp(options = {}) {
       if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'nailsbyevelin-api' })
 
       if (req.method === 'GET' && (path === '/api/catalog' || path === '/api/services')) {
-        return json(res, 200, { ...catalog, services, rules: publicRules, timezone: config.timezone, depositPercent: config.depositPercent, emailEnabled: Boolean(config.resendApiKey && config.mailFrom), paymentMethods: payments.list(), maxDaysAhead: config.maxDaysAhead })
+        return json(res, 200, { ...catalog, services, rules: publicRules, timezone: config.timezone, depositPercent: config.depositPercent, emailEnabled: Boolean(config.resendApiKey && config.mailFrom), paymentMethods: payments.list(), maxDaysAhead: config.maxDaysAhead, closedDays: config.closedDays })
       }
 
       if (req.method === 'GET' && path === '/api/availability') {
@@ -238,8 +245,10 @@ export function createApp(options = {}) {
         if (!service) return json(res, 400, { error: 'invalid_service' })
         const today = localDate(now(), config.timezone)
         const from = url.searchParams.get('from') || today
-        const to = url.searchParams.get('to') || addDays(from, 30)
-        if (!isDateString(from) || !isDateString(to) || to < from || to > addDays(from, 62)) return json(res, 400, { error: 'invalid_range' })
+        const lastBookable = addDays(today, config.maxDaysAhead)
+        const requestedTo = url.searchParams.get('to') || lastBookable
+        if (!isDateString(from) || !isDateString(requestedTo) || requestedTo < from || requestedTo > addDays(from, 62)) return json(res, 400, { error: 'invalid_range' })
+        const to = requestedTo < lastBookable ? requestedTo : lastBookable
         const days = await store.read((state) => {
           const result = {}
           for (let date = from; date <= to; date = addDays(date, 1)) result[date] = slotsOn(state, date, service.durationMinutes).map((slot) => slot.time)
@@ -350,6 +359,7 @@ export function createApp(options = {}) {
             if (!['booked', 'pending_payment'].includes(booking.status)) return { error: 'booking_not_active' }
             booking.lateCancellation = Date.parse(booking.startsAt) - now().getTime() < config.lateCancelHours * HOUR
             booking.cancelledAt = now().toISOString()
+            booking.cancelledBy = 'guest'
             if (booking.amountPaidHuf > 0) booking.refundStatus = 'review'
             releaseBooking(state, booking, 'cancelled')
           }
@@ -443,19 +453,28 @@ export function createApp(options = {}) {
       if (path.startsWith('/api/admin/') && !sameToken(req.headers.authorization, `Bearer ${config.adminToken}`)) return json(res, 401, { error: 'admin_auth_required' })
 
       if (req.method === 'GET' && path === '/api/admin/bookings') {
-        const data = await store.update((state) => {
-          expireHolds(state)
+        // Gyors út: sima olvasás; írási tranzakció csak akkor, ha van lejárt fizetési határidő
+        const hasExpired = (state) => state.bookings.some((item) => item.status === 'pending_payment' && item.holdExpiresAt <= now().toISOString())
+        const build = (state) => {
           const strikes = state.bookings.filter((item) => item.status === 'no_show')
+          // Vendégenként egyszer számoljuk (telefon+e-mail páronként), nem foglalásonként újra
+          const counts = new Map()
+          const countFor = (booking) => {
+            const key = `${booking.phone}\u0000${booking.email}`
+            if (!counts.has(key)) counts.set(key, strikes.filter((item) => item.phone === booking.phone || item.email === booking.email).length)
+            return counts.get(key)
+          }
           const bookings = state.bookings.toSorted((a, b) => a.startsAt.localeCompare(b.startsAt)).map((booking) => ({
-            ...booking, manageToken: undefined,
-            noShowCount: strikes.filter((item) => item.phone === booking.phone || item.email === booking.email).length,
+            ...booking, manageToken: undefined, noShowCount: countFor(booking),
           }))
           return { bookings, blocks: state.blocks.toSorted((a, b) => a.startsAt.localeCompare(b.startsAt)) }
-        })
+        }
+        const data = (await store.read((state) => (hasExpired(state) ? null : build(state))))
+          ?? (await store.update((state) => { expireHolds(state); return build(state) }))
         return json(res, 200, data)
       }
 
-      const adminBookingRoute = path.match(/^\/api\/admin\/bookings\/([\w-]+)\/(no-show|payment-confirmed|complete|cancel)$/)
+      const adminBookingRoute = path.match(/^\/api\/admin\/bookings\/([\w-]+)\/(no-show|payment-confirmed|complete|cancel|refunded)$/)
       if (req.method === 'POST' && adminBookingRoute) {
         const [, id, action] = adminBookingRoute
         const body = await readBody(req)
@@ -471,10 +490,18 @@ export function createApp(options = {}) {
           } else if (action === 'complete') {
             if (booking.status !== 'booked') return { error: 'booking_not_active' }
             booking.status = 'completed'; booking.completedAt = now().toISOString()
+          } else if (action === 'refunded') {
+            // Az előleg visszautalása kézzel történik (banki utalás); itt csak megjelöljük, hogy megvolt
+            if (booking.refundStatus !== 'review') return { error: 'refund_not_pending' }
+            booking.refundStatus = 'refunded'; booking.refundedAt = now().toISOString()
           } else if (action === 'cancel') {
             if (!['booked', 'pending_payment'].includes(booking.status)) return { error: 'booking_not_active' }
             if (booking.amountPaidHuf > 0) booking.refundStatus = 'review'
             booking.cancelledAt = now().toISOString()
+            booking.cancelledBy = 'admin'
+            // Statisztikához: a sürgős szabadnap miatt lemondott (eldobott) időpontok külön számolhatók
+            if (body.reason === 'urgent_block') booking.cancelReason = 'urgent_block'
+            booking.lateCancellation = Date.parse(booking.startsAt) - now().getTime() < config.lateCancelHours * HOUR
             releaseBooking(state, booking, 'cancelled')
           } else {
             if (!['pending_payment', 'expired'].includes(booking.status) || !['required', 'refund_needed'].includes(booking.paymentStatus)) return { error: 'payment_not_required' }
@@ -495,8 +522,18 @@ export function createApp(options = {}) {
         if (isDateString(body.date)) { startsAt = zonedToUtc(body.date, '00:00', config.timezone); endsAt = zonedToUtc(addDays(body.date, 1), '00:00', config.timezone) }
         else { startsAt = new Date(body.startsAt); endsAt = new Date(body.endsAt) }
         if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime()) || endsAt <= startsAt) return json(res, 400, { error: 'invalid_range' })
-        const block = { id: randomUUID(), startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), reason: typeof body.reason === 'string' ? body.reason.slice(0, 200) : '' }
-        await store.update((state) => { state.blocks.push(block) })
+        const reason = typeof body.reason === 'string' ? body.reason.slice(0, 200) : ''
+        // Sürgős: foglalás alatti letiltás (force) vagy kifejezetten sürgősnek jelölt
+        const block = { id: randomUUID(), startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), reason, urgent: body.force === true || body.urgent === true || /sürgős/i.test(reason) }
+        // A foglalásokat ugyanabban a tranzakcióban nézzük, mint a mentést: az admin app listája közben elavulhatott
+        const conflicts = await store.update((state) => {
+          const found = state.bookings.filter((item) => holds(item) && item.startsAt < block.endsAt && item.endsAt > block.startsAt)
+          if (!found.length || body.force === true) state.blocks.push(block)
+          return found
+        })
+        if (conflicts.length && body.force !== true) {
+          return json(res, 409, { error: 'block_has_bookings', bookings: conflicts.map((item) => ({ id: item.id, name: item.name, phone: item.phone, startsAt: item.startsAt })) })
+        }
         return json(res, 201, block)
       }
       const blockRoute = path.match(/^\/api\/admin\/blocks\/([\w-]+)$/)

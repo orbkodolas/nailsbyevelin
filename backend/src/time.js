@@ -61,8 +61,10 @@ export const overlaps = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart 
 // busy: [{ startsAt, endsAt }] ISO-időpontok (foglalások és blokkok).
 export function slotsForDate({ date, durationMinutes, busy, config, now }) {
   const windows = config.workingHours[weekdayOf(date)] || []
+  if (config.closedDays?.includes(date.slice(5))) return [] // évente ismétlődő szünnapok (HH-NN)
+  // Legfeljebb maxDaysAhead nappal előre, naptári napokban (a mai nap is számít)
+  if (date > addDays(localDate(now, config.timezone), config.maxDaysAhead)) return []
   const earliest = now.getTime() + config.minLeadMinutes * 60_000
-  const latest = now.getTime() + config.maxDaysAhead * 86_400_000
   const buffer = config.bufferMinutes * 60_000
   const busyRanges = busy.map((item) => [Date.parse(item.startsAt), Date.parse(item.endsAt)])
   const slots = []
@@ -72,7 +74,7 @@ export function slotsForDate({ date, durationMinutes, busy, config, now }) {
       const start = zonedToUtc(date, time, config.timezone)
       const startMs = start.getTime()
       const endMs = startMs + durationMinutes * 60_000
-      if (startMs < earliest || startMs > latest) continue
+      if (startMs < earliest) continue
       if (busyRanges.some(([bStart, bEnd]) => overlaps(startMs, endMs + buffer, bStart, bEnd + buffer))) continue
       slots.push({ time, startsAt: start.toISOString() })
     }
