@@ -1,0 +1,16 @@
+# Render Blueprint: a backend (Node, nulla függőség). A JSON-tár ingyenes csomagon újraindításkor törlődik – demóra jó.
+services:
+  - type: web
+    name: nailsbyevelin-api
+    runtime: node
+    plan: free
+    buildCommand: echo "nincs build"
+    startCommand: node backend/src/server.js
+    healthCheckPath: /health
+    envVars:
+      - { key: ADMIN_TOKEN, generateValue: true }
+      - { key: TRUST_PROXY, value: '1' }
+      - { key: PUBLIC_URL, value: 'https://orbkodolas.github.io/nailsbyevelin' }
+      - { key: CORS_ORIGIN, value: 'https://orbkodolas.github.io' }
+      - { key: API_URL, sync: false }          # a service saját https://….onrender.com címe
+      - { key: FORMSUBMIT_EMAIL, sync: false }

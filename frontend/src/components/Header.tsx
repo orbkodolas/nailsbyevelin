@@ -38,7 +38,7 @@ export function Header() {
   return (
     <header className={`site-header${scrolled ? ' is-scrolled' : ''}${hidden && !open ? ' is-hidden' : ''}${open ? ' is-open' : ''}`}>
       <a className="brand" href="#kezdo" aria-label="Nails by Evelin – főoldal" onClick={() => setOpen(false)}>
-        <img src="/images/logo-sm.webp" width="44" height="44" alt="" />
+        <img src={`${import.meta.env.BASE_URL}images/logo-sm.webp`} width="44" height="44" alt="" />
         <span className="brand-name">Nails <em>by</em> Evelin</span>
       </a>
       <nav className="nav-desktop" aria-label="Fő navigáció">
