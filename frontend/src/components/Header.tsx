@@ -9,6 +9,10 @@ const links = [
   ['#utalvany', 'Utalvány'],
 ]
 
+// Egyezik a .burger span átmenetével (base.css)
+const MENU_MS = 400
+const MENU_EASE = 'cubic-bezier(0.65, 0, 0.35, 1)'
+
 export function Header() {
   const [open, setOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -54,8 +58,6 @@ export function Header() {
     clipAnim.current?.cancel()
     clipAnim.current = null
     if (reducedMotion()) return
-    let keyframes: Keyframe[]
-    let options: KeyframeAnimationOptions
     const m = menu.getBoundingClientRect()
     const b = burger.getBoundingClientRect()
     const x = b.left + b.width / 2 - m.left
@@ -63,17 +65,12 @@ export function Header() {
     const at = `at ${x}px ${y}px`
     // Pontosan a legtávolabbi sarokig érő sugár: így a zárás első képkockájától látszik a zsugorodás
     const full = `circle(${Math.ceil(Math.hypot(Math.max(x, m.width - x), Math.max(y, m.height - y))) + 2}px ${at})`
-    if (open) {
-      keyframes = [{ clipPath: current || `circle(0px ${at})` }, { clipPath: full }]
-      options = { duration: 450, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
-    } else {
-      // Vissza a burger közepébe; gyors, azonnal induló görbe, hogy az X→hamburger váltással együtt érjen véget
-      keyframes = [
-        { clipPath: current || full, visibility: 'visible' },
-        { clipPath: `circle(0px ${at})`, visibility: 'visible' },
-      ]
-      options = { duration: 320, easing: 'cubic-bezier(0.33, 0, 0.2, 1)' }
-    }
+    // Nyitás és zárás ugyanaz a mozgás időben megfordítva: azonos idő, szimmetrikus görbe, mindkettő a burger közepéhez kötve
+    const closed = `circle(0px ${at})`
+    const keyframes: Keyframe[] = open
+      ? [{ clipPath: current || closed }, { clipPath: full }]
+      : [{ clipPath: current || full, visibility: 'visible' }, { clipPath: closed, visibility: 'visible' }]
+    const options: KeyframeAnimationOptions = { duration: MENU_MS, easing: MENU_EASE }
     const anim = menu.animate(keyframes, options)
     anim.onfinish = () => { if (clipAnim.current === anim) clipAnim.current = null }
     clipAnim.current = anim
