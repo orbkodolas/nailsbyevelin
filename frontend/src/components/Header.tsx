@@ -40,7 +40,7 @@ export function Header() {
     return () => { getLenis()?.start(); document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
   }, [open])
 
-  // Kör-maszk animáció (WAAPI): nyitás a burger közepéből, zárás a bal alsó sarokba.
+  // Kör-maszk animáció (WAAPI): nyitás a burger közepéből, zárás vissza oda (a nyitás tükre).
   // A CSS végállapotok (zárt: 0 sugár, nyitott: teljes fedés) vizuálisan azonosak az animációk végpontjaival,
   // így a befejezéskor nincs ugrás; megszakításkor az aktuális (animált) értékről folytatjuk.
   useEffect(() => {
@@ -56,19 +56,19 @@ export function Header() {
     if (reducedMotion()) return
     let keyframes: Keyframe[]
     let options: KeyframeAnimationOptions
+    const m = menu.getBoundingClientRect()
+    const b = burger.getBoundingClientRect()
+    const at = `at ${b.left + b.width / 2 - m.left}px ${b.top + b.height / 2 - m.top}px`
     if (open) {
-      const m = menu.getBoundingClientRect()
-      const b = burger.getBoundingClientRect()
-      const at = `at ${b.left + b.width / 2 - m.left}px ${b.top + b.height / 2 - m.top}px`
       keyframes = [{ clipPath: current || `circle(0px ${at})` }, { clipPath: `circle(150% ${at})` }]
       options = { duration: 450, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
     } else {
-      // Teljesen nyitott állapotból: középpont azonnal a bal alsó sarokba, teljes fedő sugárral (vizuálisan azonos)
+      // A nyitás tükre: vissza a burger közepébe, ugyanannyi idő alatt, fordított görbével
       keyframes = [
-        { clipPath: current || 'circle(150% at 0px 100%)', visibility: 'visible' },
-        { clipPath: 'circle(0px at 0px 100%)', visibility: 'visible' },
+        { clipPath: current || `circle(150% ${at})`, visibility: 'visible' },
+        { clipPath: `circle(0px ${at})`, visibility: 'visible' },
       ]
-      options = { duration: 400, easing: 'cubic-bezier(0.55, 0, 0.75, 0.2)' }
+      options = { duration: 450, easing: 'cubic-bezier(0.7, 0, 0.84, 0)' }
     }
     const anim = menu.animate(keyframes, options)
     anim.onfinish = () => { if (clipAnim.current === anim) clipAnim.current = null }
