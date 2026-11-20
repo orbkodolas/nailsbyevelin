@@ -1,0 +1,24 @@
+import { catalog } from '../lib/catalog'
+import { Headline } from './Headline'
+
+export function Rules() {
+  return (
+    <section className="rules" id="hazirend">
+      <div className="rules-head">
+        <p className="eyebrow" data-reveal><span className="eyebrow-line" />Házirend</p>
+        <Headline text={'A tisztelet\n*kölcsönös.*'} />
+        <p className="section-sub" data-reveal>A munkám időt, figyelmet és precizitást kér. Ezek a szabályok azért vannak, hogy minden vendégemre jusson ebből.</p>
+      </div>
+      <ol className="rules-list">
+        {catalog.rules.map((rule, index) => (
+          <li key={rule.id} data-reveal>
+            <span className="rule-no">{index + 1}</span>
+            <h3>{rule.title}</h3>
+            <p>{rule.text}</p>
+          </li>
+        ))}
+      </ol>
+      <p className="rules-callout" data-reveal>Nem tudsz jönni? <em>Szólj.</em> A visszaigazoló e-mailben egy kattintás a lemondás, magyarázkodni nem kell.</p>
+    </section>
+  )
+}

@@ -1,0 +1,8 @@
+node_modules
+.env
+backend/data/*.json
+backend/data/*.tmp
+dist
+*.local
+.orb
+.claude

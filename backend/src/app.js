@@ -1,0 +1,502 @@
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+import { createStore } from './store.js'
+import { catalog, findService, services, publicRules } from './catalog.js'
+import { loadConfig } from './config.js'
+import { createPayments } from './payments.js'
+import { createNotifier } from './notify.js'
+import { addDays, isDateString, localDate, localTime, overlaps, slotsForDate, zonedToUtc } from './time.js'
+
+const HOUR = 60 * 60 * 1000
+const DAY = 24 * HOUR
+const INACTIVE = ['cancelled', 'rejected', 'expired', 'no_show', 'completed']
+const VOUCHER_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+const json = (res, status, value, headers = {}) => {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...headers })
+  res.end(JSON.stringify(value))
+}
+const httpError = (status, message) => Object.assign(new Error(message), { status })
+const normalizePhone = (value) => {
+  const compact = value.replace(/[\s().-]/g, '')
+  if (compact.startsWith('0036')) return `+36${compact.slice(4)}`
+  if (compact.startsWith('06')) return `+36${compact.slice(2)}`
+  if (compact.startsWith('36')) return `+${compact}`
+  return compact
+}
+const sameToken = (a, b) => {
+  const left = Buffer.from(String(a || '')); const right = Buffer.from(String(b || ''))
+  return left.length === right.length && timingSafeEqual(left, right)
+}
+const isEmail = (value) => typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+const roundTo100 = (value) => Math.round(value / 100) * 100
+
+async function readRaw(req) {
+  let body = ''
+  for await (const chunk of req) {
+    body += chunk
+    if (body.length > 64_000) throw httpError(413, 'A kérés túl nagy.')
+  }
+  return body
+}
+async function readBody(req) {
+  const raw = await readRaw(req)
+  try { return JSON.parse(raw || '{}') } catch { throw httpError(400, 'Érvénytelen JSON.') }
+}
+
+export function createApp(options = {}) {
+  const { dataFile = fileURLToPath(new URL('../data/bookings.json', import.meta.url)), fetchImpl = globalThis.fetch, now = () => new Date(), log = console } = options
+  const config = loadConfig(process.env, {
+    ...(options.adminToken ? { adminToken: options.adminToken } : {}),
+    ...(options.formSubmitEmail ? { formSubmitEmail: options.formSubmitEmail } : {}),
+    ...options.config,
+  })
+  const store = createStore(dataFile)
+  const payments = createPayments({ config, fetchImpl, now })
+  const notifier = createNotifier({ config, fetchImpl, log })
+  const pending = new Set()
+  const background = (promise) => { const tracked = promise.catch(() => {}).finally(() => pending.delete(tracked)); pending.add(tracked) }
+  const hits = new Map()
+
+  // ---------- közös segédek ----------
+  const rateLimited = (req) => {
+    const forwarded = config.trustProxy ? String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() : ''
+    const key = forwarded || req.socket.remoteAddress || 'unknown'
+    const recent = (hits.get(key) || []).filter((time) => time > Date.now() - HOUR)
+    recent.push(Date.now())
+    hits.set(key, recent)
+    return recent.length > 12
+  }
+
+  const holds = (booking) => booking.status === 'booked' || (booking.status === 'pending_payment' && booking.holdExpiresAt > now().toISOString())
+  const busyRanges = (state) => [
+    ...state.bookings.filter(holds),
+    ...state.blocks,
+  ]
+  const slotsOn = (state, date, durationMinutes) => slotsForDate({ date, durationMinutes, busy: busyRanges(state), config, now: now() })
+
+  const publicBooking = (booking) => ({
+    id: booking.id, status: booking.status === 'pending_payment' && booking.holdExpiresAt <= now().toISOString() ? 'expired' : booking.status, paymentStatus: booking.paymentStatus, confirmationStatus: booking.confirmationStatus,
+    firstName: booking.name.split(' ')[0], serviceName: booking.serviceName, durationMinutes: booking.durationMinutes,
+    startsAt: booking.startsAt, endsAt: booking.endsAt, priceHuf: booking.priceHuf, amountDueHuf: booking.amountDueHuf,
+    amountPaidHuf: booking.amountPaidHuf, holdExpiresAt: booking.holdExpiresAt || null, lateCancellation: Boolean(booking.lateCancellation),
+  })
+
+  const releaseBooking = (state, booking, status) => {
+    booking.status = status
+    for (const reminder of state.reminders) if (reminder.bookingId === booking.id && reminder.status === 'queued') reminder.status = 'cancelled'
+    for (const payment of state.payments) if (payment.targetId === booking.id && ['created', 'pending'].includes(payment.status)) payment.status = status
+  }
+
+  // A hold lejárta: fizetésre váró foglalás elengedi az időpontot
+  const expireHolds = (state) => {
+    let changed = false
+    for (const booking of state.bookings) {
+      if (booking.status === 'pending_payment' && booking.holdExpiresAt <= now().toISOString()) { releaseBooking(state, booking, 'expired'); changed = true }
+    }
+    return changed
+  }
+
+  // Fizetés rögzítése (webhook vagy admin): idempotens
+  function applyPaid(state, { kind, targetId }) {
+    if (kind === 'voucher') {
+      const voucher = state.vouchers.find((item) => item.id === targetId)
+      if (!voucher || voucher.status !== 'pending_payment') return null
+      voucher.status = 'active'
+      voucher.paidAt = now().toISOString()
+      const expires = new Date(now()); expires.setUTCMonth(expires.getUTCMonth() + catalog.voucher.validMonths)
+      voucher.expiresAt = expires.toISOString()
+      return { kind, voucher }
+    }
+    const booking = state.bookings.find((item) => item.id === targetId)
+    if (!booking || booking.paymentStatus === 'paid') return null
+    if (booking.status === 'expired') {
+      const start = Date.parse(booking.startsAt); const end = Date.parse(booking.endsAt)
+      const taken = busyRanges(state).some((item) => overlaps(start, end, Date.parse(item.startsAt), Date.parse(item.endsAt)))
+      if (taken) { booking.paymentStatus = 'refund_needed'; return { kind, booking, refundNeeded: true } }
+    } else if (booking.status !== 'pending_payment') {
+      return null
+    }
+    booking.status = 'booked'
+    booking.paymentStatus = 'paid'
+    booking.amountPaidHuf = booking.amountDueHuf
+    booking.paidAt = now().toISOString()
+    delete booking.holdExpiresAt
+    for (const feeId of booking.feeBookingIds || []) {
+      const fee = state.bookings.find((item) => item.id === feeId)
+      if (fee) fee.feeSettled = true
+    }
+    return { kind, booking }
+  }
+
+  const afterPaid = (result) => {
+    if (!result) return
+    if (result.voucher) {
+      background(notifier.voucherMail(result.voucher))
+      background(notifier.notifyOwner(`Új ajándékutalvány – ${result.voucher.buyerName}`, { code: result.voucher.code, amount: result.voucher.amountHuf, buyer: result.voucher.buyerEmail }))
+    } else if (result.booking && !result.refundNeeded) {
+      background(notifier.guestBookingMail(result.booking))
+      background(notifier.ownerBookingEvent(result.booking, 'paid'))
+    } else if (result.booking) {
+      background(notifier.notifyOwner(`Visszatérítés szükséges – ${result.booking.name}`, { booking: result.booking.id, reason: 'Fizetés a hold lejárta után érkezett, az időpont már foglalt.' }))
+    }
+  }
+
+  // Fizetés indítása a kiválasztott szolgáltatónál
+  async function startPayment({ kind, targetId, providerId, description, customer, amountHuf, returnUrl }) {
+    const provider = payments.get(providerId) || payments.get(payments.defaultProvider)
+    const payment = { id: randomUUID(), provider: providerId, kind, targetId, amountHuf, description, status: 'created', createdAt: now().toISOString() }
+    await store.update((state) => { state.payments.push(payment) })
+    try {
+      const checkout = await provider.createCheckout({ payment, customer, returnUrl })
+      await store.update((state) => {
+        const saved = state.payments.find((item) => item.id === payment.id)
+        if (saved) Object.assign(saved, { status: 'pending', providerRef: checkout.providerRef, checkoutUrl: checkout.url, orderRef: checkout.orderRef })
+      })
+      return { id: payment.id, provider: providerId, amountHuf, checkoutUrl: checkout.url || null, instructions: checkout.instructions || null }
+    } catch (error) {
+      log.error?.(`[fizetés] ${providerId}: ${error.message} ${error.providerDetail || ''}`)
+      await store.update((state) => { const saved = state.payments.find((item) => item.id === payment.id); if (saved) saved.status = 'error' })
+      return { id: payment.id, provider: providerId, amountHuf, checkoutUrl: null, instructions: null, error: 'provider_unavailable' }
+    }
+  }
+
+  const holdUntil = (providerId) => new Date(now().getTime() + (providerId === 'manual' ? config.manualHoldHours * HOUR : config.onlineHoldMinutes * 60_000)).toISOString()
+  const bookingReturnUrl = (booking) => `${config.publicUrl}/#/foglalas/${booking.id}/${booking.manageToken}`
+
+  // ---------- időzített feladatok ----------
+  async function tick() {
+    const changed = await store.update((state) => expireHolds(state))
+    if (!config.resendApiKey || !config.mailFrom) return { expired: changed }
+    const due = await store.read((state) => state.reminders.filter((item) => item.status === 'queued' && item.dueAt <= now().toISOString()).map((item) => ({ ...item, booking: state.bookings.find((b) => b.id === item.bookingId) })))
+    for (const reminder of due) {
+      const { booking } = reminder
+      let status = 'sent'
+      if (!booking || booking.status !== 'booked' || !booking.email) status = 'skipped'
+      else if (Date.parse(reminder.dueAt) < now().getTime() - 3 * HOUR) status = 'skipped'
+      else if (await notifier.guestReminderMail(booking, reminder.kind) !== 'sent') status = 'queued'
+      if (status !== 'queued') await store.update((state) => { const saved = state.reminders.find((item) => item.id === reminder.id); if (saved) { saved.status = status; saved.sentAt = now().toISOString() } })
+    }
+    return { expired: changed }
+  }
+
+  // ---------- kéréskezelő ----------
+  async function app(req, res) {
+    res.setHeader('access-control-allow-origin', config.corsOrigin)
+    res.setHeader('access-control-allow-methods', 'GET, POST, DELETE, OPTIONS')
+    res.setHeader('access-control-allow-headers', 'content-type, authorization, x-manage-token')
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
+
+    const url = new URL(req.url, 'http://localhost')
+    const path = url.pathname
+    try {
+      if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'nailsbyevelin-api' })
+
+      if (req.method === 'GET' && (path === '/api/catalog' || path === '/api/services')) {
+        return json(res, 200, { ...catalog, services, rules: publicRules, timezone: config.timezone, depositPercent: config.depositPercent, emailEnabled: Boolean(config.resendApiKey && config.mailFrom), paymentMethods: payments.list(), maxDaysAhead: config.maxDaysAhead })
+      }
+
+      if (req.method === 'GET' && path === '/api/availability') {
+        const service = findService(url.searchParams.get('serviceId'))
+        if (!service) return json(res, 400, { error: 'invalid_service' })
+        const today = localDate(now(), config.timezone)
+        const from = url.searchParams.get('from') || today
+        const to = url.searchParams.get('to') || addDays(from, 30)
+        if (!isDateString(from) || !isDateString(to) || to < from || to > addDays(from, 62)) return json(res, 400, { error: 'invalid_range' })
+        const days = await store.read((state) => {
+          const result = {}
+          for (let date = from; date <= to; date = addDays(date, 1)) result[date] = slotsOn(state, date, service.durationMinutes).map((slot) => slot.time)
+          return result
+        })
+        return json(res, 200, { timezone: config.timezone, serviceId: service.id, durationMinutes: service.durationMinutes, days })
+      }
+
+      // ----- foglalás létrehozása -----
+      if (req.method === 'POST' && path === '/api/bookings') {
+        if (rateLimited(req)) return json(res, 429, { error: 'too_many_requests', message: 'Túl sok kérés. Próbáld újra később.' })
+        const body = await readBody(req)
+        if (body.website) return json(res, 400, { error: 'invalid_request' }) // honeypot
+        const service = findService(body.serviceId)
+        if (!service) return json(res, 400, { error: 'invalid_service', message: 'Válassz érvényes szolgáltatást.' })
+        if (typeof body.name !== 'string' || body.name.trim().length < 2 || body.name.length > 100) return json(res, 400, { error: 'invalid_name', message: 'Add meg a neved.' })
+        if (typeof body.phone !== 'string' || normalizePhone(body.phone).length < 7 || normalizePhone(body.phone).length > 20) return json(res, 400, { error: 'invalid_phone', message: 'Érvénytelen telefonszám.' })
+        if (!isEmail(body.email)) return json(res, 400, { error: 'invalid_email', message: 'Az e-mail cím kell a visszaigazoláshoz és az emlékeztetőhöz.' })
+        if (body.acceptedRules !== true) return json(res, 400, { error: 'rules_acceptance_required', message: 'A házirend elfogadása szükséges.' })
+        // A böngésző dátumot és helyi időt küld; az időzóna-átváltást a szerver végzi
+        if (isDateString(body.date) && /^\d{2}:\d{2}$/.test(body.time || '')) body.startsAt = zonedToUtc(body.date, body.time, config.timezone).toISOString()
+        if (typeof body.startsAt !== 'string' || !/(Z|[+-]\d{2}:\d{2})$/.test(body.startsAt) || !Number.isFinite(Date.parse(body.startsAt))) return json(res, 400, { error: 'invalid_start_time', message: 'Érvénytelen időpont.' })
+
+        const start = new Date(body.startsAt)
+        const end = new Date(start.getTime() + service.durationMinutes * 60_000)
+        const phone = normalizePhone(body.phone)
+        const email = body.email.trim().toLowerCase()
+        const providerId = payments.get(body.paymentMethod) ? body.paymentMethod : payments.defaultProvider
+        const manageToken = randomBytes(18).toString('base64url')
+
+        const result = await store.update((state) => {
+          expireHolds(state)
+          const date = localDate(start, config.timezone)
+          if (!slotsOn(state, date, service.durationMinutes).some((slot) => slot.time === localTime(start, config.timezone) && slot.startsAt === start.toISOString())) return { error: 'slot_unavailable' }
+          const mine = (item) => item.phone === phone || item.email === email
+          const active = state.bookings.filter((item) => mine(item) && holds(item) && item.endsAt > now().toISOString())
+          if (active.length >= config.maxActiveBookingsPerGuest) return { error: 'too_many_bookings' }
+
+          const strikes = state.bookings.filter((item) => mine(item) && item.status === 'no_show')
+          const unsettled = strikes.filter((item) => item.noShowReason === 'late' && !item.feeSettled)
+          const feeHuf = unsettled.reduce((sum, item) => sum + item.priceHuf, 0)
+          const deposit = config.depositPercent > 0 ? roundTo100(service.priceHuf * config.depositPercent / 100) : 0
+          const amountDueHuf = strikes.length ? service.priceHuf + feeHuf : deposit
+          const needsPayment = amountDueHuf > 0
+          const booking = {
+            id: randomUUID(), manageToken, name: body.name.trim(), phone, email,
+            serviceId: service.id, serviceName: service.name, durationMinutes: service.durationMinutes, priceHuf: service.priceHuf,
+            startsAt: start.toISOString(), endsAt: end.toISOString(),
+            status: needsPayment ? 'pending_payment' : 'booked',
+            paymentStatus: needsPayment ? 'required' : 'not_required',
+            paymentReason: strikes.length ? 'prepay_after_strike' : deposit ? 'deposit' : null,
+            amountDueHuf, amountPaidHuf: 0, feeBookingIds: unsettled.map((item) => item.id),
+            holdExpiresAt: needsPayment ? holdUntil(providerId) : undefined,
+            confirmationStatus: 'awaiting', acceptedRulesAt: now().toISOString(), createdAt: now().toISOString(),
+            customerNote: typeof body.note === 'string' ? body.note.slice(0, 1000) : '',
+          }
+          state.bookings.push(booking)
+          for (const [kind, offset] of [['day_before', DAY], ['two_hours_before', 2 * HOUR]]) {
+            const dueAt = start.getTime() - offset
+            if (dueAt > now().getTime()) state.reminders.push({ id: randomUUID(), bookingId: booking.id, kind, dueAt: new Date(dueAt).toISOString(), status: 'queued' })
+          }
+          return { booking, strikes: strikes.length }
+        })
+        if (result.error === 'too_many_bookings') return json(res, 409, { error: result.error, message: `Egyszerre legfeljebb ${config.maxActiveBookingsPerGuest} aktív foglalásod lehet.` })
+        if (result.error) return json(res, 409, { error: result.error, message: 'Ez az időpont már nem szabad. Válassz másikat.' })
+
+        const { booking } = result
+        let payment = null
+        if (booking.status === 'pending_payment') {
+          payment = await startPayment({
+            kind: 'booking', targetId: booking.id, providerId, amountHuf: booking.amountDueHuf, customer: { name: booking.name, email: booking.email },
+            description: `Nails by Evelin – ${booking.serviceName}`, returnUrl: bookingReturnUrl(booking),
+          })
+        }
+        background(notifier.ownerBookingEvent(booking, 'created'))
+        background(notifier.guestBookingMail(booking))
+        const policy = booking.paymentReason === 'prepay_after_strike'
+          ? 'A korábbi elmaradt alkalom miatt az időpont a teljes összeg előre fizetése után válik véglegessé.'
+          : booking.status === 'pending_payment' ? 'Az időpont a fizetés után válik véglegessé.' : 'Az időpont rögzítve. Ha nem tudsz eljönni, a lenti linken mondd le.'
+        return json(res, 201, { ...publicBooking(booking), manageToken, manageUrl: notifier.manageUrl(booking), payment, policy })
+      }
+
+      // ----- vendég: saját foglalás kezelése (token kell) -----
+      const bookingRoute = path.match(/^\/api\/bookings\/([\w-]+)(?:\/(confirm|cancel|pay))?$/)
+      if (bookingRoute && ((req.method === 'GET' && !bookingRoute[2]) || (req.method === 'POST' && bookingRoute[2]))) {
+        const [, id, action] = bookingRoute
+        const body = req.method === 'POST' ? await readBody(req) : {}
+        const token = req.headers['x-manage-token'] || body.token || url.searchParams.get('token')
+        const found = await store.read((state) => state.bookings.find((item) => item.id === id))
+        if (!found || !sameToken(token, found.manageToken)) return json(res, 404, { error: 'not_found' })
+        if (!action) return json(res, 200, publicBooking(found))
+
+        if (action === 'pay') {
+          if (found.status !== 'pending_payment' || found.holdExpiresAt <= now().toISOString()) return json(res, 409, { error: 'payment_not_required' })
+          const providerId = payments.get(body.paymentMethod) ? body.paymentMethod : payments.defaultProvider
+          const payment = await startPayment({ kind: 'booking', targetId: id, providerId, amountHuf: found.amountDueHuf, customer: { name: found.name, email: found.email }, description: `Nails by Evelin – ${found.serviceName}`, returnUrl: bookingReturnUrl(found) })
+          return json(res, 200, { payment })
+        }
+
+        const result = await store.update((state) => {
+          const booking = state.bookings.find((item) => item.id === id)
+          if (action === 'confirm') {
+            if (booking.status === 'pending_payment') return { error: 'payment_required' }
+            if (booking.status !== 'booked') return { error: 'booking_not_active' }
+            booking.confirmationStatus = 'confirmed'
+            booking.confirmedAt = now().toISOString()
+          } else {
+            if (!['booked', 'pending_payment'].includes(booking.status)) return { error: 'booking_not_active' }
+            booking.lateCancellation = Date.parse(booking.startsAt) - now().getTime() < config.lateCancelHours * HOUR
+            booking.cancelledAt = now().toISOString()
+            if (booking.amountPaidHuf > 0) booking.refundStatus = 'review'
+            releaseBooking(state, booking, 'cancelled')
+          }
+          return { booking }
+        })
+        if (result.error) return json(res, 409, { error: result.error })
+        if (action === 'cancel') background(notifier.ownerBookingEvent(result.booking, result.booking.lateCancellation ? 'late_cancelled' : 'cancelled'))
+        return json(res, 200, publicBooking(result.booking))
+      }
+
+      // ----- ajándékutalvány vásárlás -----
+      if (req.method === 'POST' && path === '/api/vouchers') {
+        if (rateLimited(req)) return json(res, 429, { error: 'too_many_requests' })
+        const body = await readBody(req)
+        if (body.website) return json(res, 400, { error: 'invalid_request' })
+        const { minHuf, maxHuf } = catalog.voucher
+        if (!Number.isInteger(body.amountHuf) || body.amountHuf < minHuf || body.amountHuf > maxHuf || body.amountHuf % 500 !== 0) return json(res, 400, { error: 'invalid_amount', message: `Az érték ${minHuf}–${maxHuf} Ft között, 500 Ft-os lépésekben adható meg.` })
+        if (typeof body.buyerName !== 'string' || body.buyerName.trim().length < 2 || body.buyerName.length > 100) return json(res, 400, { error: 'invalid_name', message: 'Add meg a neved.' })
+        if (!isEmail(body.buyerEmail)) return json(res, 400, { error: 'invalid_email', message: 'Érvénytelen e-mail cím.' })
+        const providerId = payments.get(body.paymentMethod) ? body.paymentMethod : payments.defaultProvider
+        const voucher = await store.update((state) => {
+          let code
+          do {
+            const pick = () => Array.from(randomBytes(4), (byte) => VOUCHER_ALPHABET[byte % VOUCHER_ALPHABET.length]).join('')
+            code = `NBE-${pick()}-${pick()}`
+          } while (state.vouchers.some((item) => item.code === code))
+          const created = {
+            id: randomUUID(), code, status: 'pending_payment', amountHuf: body.amountHuf,
+            buyerName: body.buyerName.trim(), buyerEmail: body.buyerEmail.trim().toLowerCase(),
+            recipientName: typeof body.recipientName === 'string' ? body.recipientName.trim().slice(0, 100) : '',
+            message: typeof body.message === 'string' ? body.message.slice(0, 300) : '', createdAt: now().toISOString(),
+          }
+          state.vouchers.push(created)
+          return created
+        })
+        const payment = await startPayment({
+          kind: 'voucher', targetId: voucher.id, providerId, amountHuf: voucher.amountHuf, customer: { name: voucher.buyerName, email: voucher.buyerEmail },
+          description: `Nails by Evelin ajándékutalvány – ${new Intl.NumberFormat('hu-HU').format(voucher.amountHuf)} Ft`, returnUrl: `${config.publicUrl}/#/utalvany/koszonjuk`,
+        })
+        return json(res, 201, { id: voucher.id, status: voucher.status, amountHuf: voucher.amountHuf, payment })
+      }
+
+      // ----- fizetési szolgáltatók visszahívása -----
+      const webhook = path.match(/^\/api\/payments\/webhook\/(\w+)$/)
+      if (webhook && ['GET', 'POST'].includes(req.method)) {
+        const provider = payments.get(webhook[1])
+        if (!provider || webhook[1] === 'manual') return json(res, 404, { error: 'not_found' })
+        const rawBody = req.method === 'POST' ? await readRaw(req) : ''
+        const event = await provider.parseWebhook({ rawBody, headers: req.headers, query: url.searchParams })
+        if (event.status === 'invalid') return json(res, 400, { error: 'invalid_signature' })
+        if (event.paymentId || event.orderRef) {
+          const settled = await store.update((state) => {
+            const payment = state.payments.find((item) => (event.paymentId ? item.id === event.paymentId : item.orderRef === event.orderRef) && item.provider === webhook[1])
+            if (!payment || ['paid', 'amount_mismatch'].includes(payment.status)) return null
+            if (event.status === 'failed') { payment.status = 'failed'; return null }
+            if (event.status !== 'paid') return null
+            if (event.amountHuf !== undefined && event.amountHuf !== payment.amountHuf) { payment.status = 'amount_mismatch'; return null }
+            payment.status = 'paid'; payment.paidAt = now().toISOString()
+            return applyPaid(state, payment)
+          })
+          afterPaid(settled)
+        }
+        const reply = provider.webhookReply?.(rawBody)
+        return reply ? (res.writeHead(200, { 'content-type': 'application/json', ...reply.headers }), res.end(reply.body)) : json(res, 200, { ok: true })
+      }
+
+      // ===== admin =====
+      if (path.startsWith('/api/admin/') && !sameToken(req.headers.authorization, `Bearer ${config.adminToken}`)) return json(res, 401, { error: 'admin_auth_required' })
+
+      if (req.method === 'GET' && path === '/api/admin/bookings') {
+        const data = await store.update((state) => {
+          expireHolds(state)
+          const strikes = state.bookings.filter((item) => item.status === 'no_show')
+          const bookings = state.bookings.toSorted((a, b) => a.startsAt.localeCompare(b.startsAt)).map((booking) => ({
+            ...booking, manageToken: undefined,
+            noShowCount: strikes.filter((item) => item.phone === booking.phone || item.email === booking.email).length,
+          }))
+          return { bookings, blocks: state.blocks.toSorted((a, b) => a.startsAt.localeCompare(b.startsAt)) }
+        })
+        return json(res, 200, data)
+      }
+
+      const adminBookingRoute = path.match(/^\/api\/admin\/bookings\/([\w-]+)\/(no-show|payment-confirmed|complete|cancel)$/)
+      if (req.method === 'POST' && adminBookingRoute) {
+        const [, id, action] = adminBookingRoute
+        const body = await readBody(req)
+        let applied = null
+        const result = await store.update((state) => {
+          const booking = state.bookings.find((item) => item.id === id)
+          if (!booking) return { error: 'not_found' }
+          if (action === 'no-show') {
+            if (!['booked', 'pending_payment'].includes(booking.status)) return { error: 'booking_not_active' }
+            booking.noShowReason = body.reason === 'late' ? 'late' : 'no_show'
+            booking.noShowAt = now().toISOString()
+            releaseBooking(state, booking, 'no_show')
+          } else if (action === 'complete') {
+            if (booking.status !== 'booked') return { error: 'booking_not_active' }
+            booking.status = 'completed'; booking.completedAt = now().toISOString()
+          } else if (action === 'cancel') {
+            if (!['booked', 'pending_payment'].includes(booking.status)) return { error: 'booking_not_active' }
+            if (booking.amountPaidHuf > 0) booking.refundStatus = 'review'
+            booking.cancelledAt = now().toISOString()
+            releaseBooking(state, booking, 'cancelled')
+          } else {
+            if (!['pending_payment', 'expired'].includes(booking.status) || !['required', 'refund_needed'].includes(booking.paymentStatus)) return { error: 'payment_not_required' }
+            applied = applyPaid(state, { kind: 'booking', targetId: id })
+            booking.paymentStatus = 'paid_manual'
+            for (const payment of state.payments) if (payment.targetId === id && ['created', 'pending'].includes(payment.status)) payment.status = 'paid_manual'
+          }
+          return { booking }
+        })
+        if (result.error) return json(res, result.error === 'not_found' ? 404 : 409, { error: result.error })
+        afterPaid(applied)
+        return json(res, 200, { ...result.booking, manageToken: undefined })
+      }
+
+      if (req.method === 'POST' && path === '/api/admin/blocks') {
+        const body = await readBody(req)
+        let startsAt; let endsAt
+        if (isDateString(body.date)) { startsAt = zonedToUtc(body.date, '00:00', config.timezone); endsAt = zonedToUtc(addDays(body.date, 1), '00:00', config.timezone) }
+        else { startsAt = new Date(body.startsAt); endsAt = new Date(body.endsAt) }
+        if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime()) || endsAt <= startsAt) return json(res, 400, { error: 'invalid_range' })
+        const block = { id: randomUUID(), startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString(), reason: typeof body.reason === 'string' ? body.reason.slice(0, 200) : '' }
+        await store.update((state) => { state.blocks.push(block) })
+        return json(res, 201, block)
+      }
+      const blockRoute = path.match(/^\/api\/admin\/blocks\/([\w-]+)$/)
+      if (req.method === 'DELETE' && blockRoute) {
+        const removed = await store.update((state) => { const before = state.blocks.length; state.blocks = state.blocks.filter((item) => item.id !== blockRoute[1]); return before !== state.blocks.length })
+        return removed ? json(res, 200, { ok: true }) : json(res, 404, { error: 'not_found' })
+      }
+
+      if (req.method === 'GET' && path === '/api/admin/vouchers') return json(res, 200, { vouchers: await store.read((state) => state.vouchers.toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))) })
+      const voucherRoute = path.match(/^\/api\/admin\/vouchers\/([\w-]+)\/(payment-confirmed|redeem)$/)
+      if (req.method === 'POST' && voucherRoute) {
+        const [, id, action] = voucherRoute
+        let applied = null
+        const result = await store.update((state) => {
+          const voucher = state.vouchers.find((item) => item.id === id)
+          if (!voucher) return { error: 'not_found' }
+          if (action === 'redeem') {
+            if (voucher.status !== 'active' || voucher.expiresAt < now().toISOString()) return { error: 'voucher_not_active' }
+            voucher.status = 'redeemed'; voucher.redeemedAt = now().toISOString()
+          } else {
+            applied = applyPaid(state, { kind: 'voucher', targetId: id })
+            if (!applied) return { error: 'payment_not_required' }
+            for (const payment of state.payments) if (payment.targetId === id && ['created', 'pending'].includes(payment.status)) payment.status = 'paid_manual'
+          }
+          return { voucher }
+        })
+        if (result.error) return json(res, result.error === 'not_found' ? 404 : 409, { error: result.error })
+        afterPaid(applied)
+        return json(res, 200, result.voucher)
+      }
+
+      if (req.method === 'GET' && path === '/api/admin/reminders') {
+        const dueOnly = url.searchParams.get('due') === '1'
+        const reminders = await store.read((state) => state.reminders.filter((item) => item.status === 'queued' && (!dueOnly || item.dueAt <= now().toISOString())))
+        return json(res, 200, { reminders })
+      }
+      if (req.method === 'POST' && path.startsWith('/api/admin/reminders/')) {
+        const id = path.split('/').at(-1)
+        const result = await store.update((state) => {
+          const reminder = state.reminders.find((item) => item.id === id)
+          if (!reminder) return { error: 'not_found' }
+          if (reminder.status !== 'queued') return { error: 'reminder_not_queued' }
+          reminder.status = 'sent'; reminder.sentAt = now().toISOString()
+          return { reminder }
+        })
+        if (result.error) return json(res, result.error === 'not_found' ? 404 : 409, { error: result.error })
+        return json(res, 200, result.reminder)
+      }
+
+      return json(res, 404, { error: 'not_found' })
+    } catch (error) {
+      if (!error.status) log.error?.(error)
+      return json(res, error.status || 500, { error: error.status ? 'bad_request' : 'internal_error', message: error.status ? error.message : 'Szerverhiba.' })
+    }
+  }
+
+  app.tick = tick
+  app.idle = () => Promise.all([...pending])
+  app.config = config
+  return app
+}
+
+export { services, publicRules }

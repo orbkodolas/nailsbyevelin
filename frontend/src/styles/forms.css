@@ -1,0 +1,164 @@
+/* ---------- Mezők ---------- */
+.field { display: block; margin-bottom: 18px; font-size: 0.8rem; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.field small { text-transform: none; letter-spacing: 0; opacity: 0.8; }
+.field input, .field textarea, .field select {
+  display: block; width: 100%; margin-top: 8px; padding: 14px 16px; border: 1px solid var(--field-border); border-radius: 12px; background: var(--field-bg); color: var(--field-text);
+  font: 300 1rem/1.4 var(--sans); letter-spacing: 0; text-transform: none; transition: border-color 0.3s, box-shadow 0.3s;
+}
+.field input::placeholder, .field textarea::placeholder { color: rgba(185, 158, 166, 0.65); }
+.field input:focus, .field textarea:focus { outline: none; border-color: var(--rose-deep); box-shadow: 0 0 0 3px rgba(201, 133, 146, 0.25); }
+.field textarea { resize: vertical; }
+.field-row { display: grid; gap: 0 18px; }
+@media (min-width: 640px) { .field-row { grid-template-columns: 1fr 1fr; } }
+.consent { display: flex; align-items: flex-start; gap: 12px; margin-top: 8px; font-size: 0.92rem; line-height: 1.5; cursor: pointer; }
+.consent input { flex: none; width: 20px; height: 20px; margin-top: 2px; accent-color: var(--rose-deep); }
+.consent a { text-decoration: underline; text-underline-offset: 0.25em; }
+.choice-group { margin: 0 0 18px; padding: 0; border: 0; min-width: 0; }
+.choice-group legend { margin-bottom: 10px; padding: 0; font-size: 0.78rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.choice { display: flex; align-items: center; gap: 10px; padding: 6px 0; cursor: pointer; }
+.choice input { accent-color: var(--rose-deep); }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { padding: 0.75em 1.3em; border: 1px solid var(--line); border-radius: 999px; background: none; font-size: 0.9rem; transition: background 0.3s, color 0.3s, border-color 0.3s; }
+.chip:hover { border-color: var(--rose); }
+.chip.is-on { background: var(--rose); border-color: var(--rose); color: var(--ink); }
+.chip-input { padding: 0; }
+.chip-input input { width: 8em; padding: 0.75em 1.1em; border: 0; border-radius: 999px; background: transparent; color: inherit; font: inherit; }
+.chip-input input:focus { outline: none; }
+.chip-input:focus-within { border-color: var(--rose); }
+.notice { margin: 16px 0; padding: 16px 20px; border: 1px solid var(--line); border-left: 2px solid var(--rose); border-radius: 4px 12px 12px 4px; background: rgba(234, 180, 189, 0.07); font-size: 0.95rem; }
+.form-error { margin: 12px 0; font-size: 0.92rem; color: #ffb4be; }
+.hint { margin-top: 12px; font-size: 0.86rem; line-height: 1.55; color: var(--muted); }
+
+/* ---------- Ajándékutalvány ---------- */
+.voucher { padding: clamp(84px, 11vw, 170px) var(--gutter); background: radial-gradient(50% 40% at 0 0, rgba(201, 100, 130, 0.2), transparent 70%), linear-gradient(180deg, var(--night), var(--plum)); }
+.voucher-grid { display: grid; gap: 56px; align-items: center; }
+.voucher-visual { perspective: 900px; }
+.voucher-card { position: relative; overflow: hidden; border-radius: 16px; box-shadow: 0 50px 90px -40px rgba(231, 150, 170, 0.45), 0 0 0 1px rgba(234, 180, 189, 0.3); transform-style: preserve-3d; will-change: transform; }
+.voucher-card img { width: 100%; height: auto; }
+.sheen { position: absolute; inset: 0; background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.3) 50%, transparent 62%); transform: translateX(-120%); animation: sheen 7s var(--ease) infinite; pointer-events: none; }
+@keyframes sheen { 0%, 55% { transform: translateX(-120%); } 85%, 100% { transform: translateX(120%); } }
+.voucher-copy .headline { margin-bottom: 26px; }
+.voucher-copy > p { max-width: 32em; color: #d4bcc1; }
+.voucher-form { margin-top: 32px; }
+.wonder { display: grid; gap: 40px; align-items: center; margin-top: clamp(80px, 10vw, 150px); padding-top: clamp(56px, 8vw, 110px); border-top: 1px solid var(--line); }
+.wonder-media { overflow: hidden; border-radius: 6px; max-width: 460px; }
+.wonder-media img { width: 100%; height: auto; }
+.wonder-copy p { max-width: 32em; margin-top: 22px; color: #d4bcc1; }
+.wonder-copy .headline { margin-bottom: 8px; }
+.wonder-quote { font: italic 400 1.5rem/1.35 var(--serif); color: var(--rose); }
+@media (min-width: 900px) {
+  .voucher-grid { grid-template-columns: 1.05fr 0.95fr; gap: 6vw; }
+  .wonder { grid-template-columns: 0.75fr 1.25fr; gap: 6vw; }
+}
+
+/* ---------- Foglalás ---------- */
+.booking { padding: clamp(84px, 11vw, 170px) var(--gutter); background: radial-gradient(60% 40% at 50% 0, rgba(201, 100, 130, 0.22), transparent 70%), var(--plum); }
+.booking-head { max-width: 1180px; margin: 0 auto clamp(36px, 5vw, 64px); }
+.booking-card { --field-bg: #fff; --field-border: rgba(42, 16, 25, 0.18); --field-text: var(--ink);
+  max-width: 1180px; margin: 0 auto; padding: clamp(20px, 4vw, 56px); border-radius: 28px; background: var(--cream); color: var(--ink); box-shadow: 0 60px 120px -50px rgba(0, 0, 0, 0.7); }
+.booking-card .field, .booking-card .choice-group legend, .booking-card .hint { color: #7a5560; }
+.booking-card .field input::placeholder, .booking-card .field textarea::placeholder { color: rgba(122, 85, 96, 0.55); }
+.booking-card .form-error { color: #a8284a; }
+.booking-card .notice { background: rgba(201, 133, 146, 0.12); border-color: rgba(42, 16, 25, 0.12); border-left-color: var(--rose-deep); }
+.booking-form { display: grid; gap: 40px; }
+.booking-form > * { min-width: 0; }
+.step { min-width: 0; margin: 0 0 44px; padding: 0; border: 0; transition: opacity 0.5s; }
+.step:last-child { margin-bottom: 0; }
+.step.is-locked { opacity: 0.38; }
+.step legend { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; padding: 0; font: 400 1.8rem/1 var(--serif); }
+.step-no { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--rose-deep); border-radius: 50%; font: 400 0.9rem var(--sans); color: #9a5063; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.tabs button { padding: 0.7em 1.3em; border: 1px solid rgba(42, 16, 25, 0.18); border-radius: 999px; background: none; font-size: 0.8rem; letter-spacing: 0.08em; transition: background 0.3s, color 0.3s; }
+.tabs button.is-on { background: var(--ink); border-color: var(--ink); color: var(--cream); }
+.options { display: grid; gap: 10px; }
+.option { position: relative; display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 16px 18px; border: 1px solid rgba(42, 16, 25, 0.16); border-radius: 14px; background: #fff; cursor: pointer; transition: border-color 0.3s, background 0.3s, transform 0.4s var(--ease); }
+.option:hover { border-color: var(--rose-deep); }
+.option.is-on { border-color: var(--rose-deep); background: #fbe9ec; box-shadow: inset 0 0 0 1px var(--rose-deep); }
+.option input { position: absolute; opacity: 0; pointer-events: none; }
+.option:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 2px; }
+.option b { font: 500 1.3rem/1 var(--serif); white-space: nowrap; }
+.calendar { max-width: 420px; }
+.calendar-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; font: 400 1.35rem var(--serif); }
+.calendar-nav button { width: 40px; height: 40px; border: 1px solid rgba(42, 16, 25, 0.18); border-radius: 50%; background: none; transition: background 0.3s; }
+.calendar-nav button:hover:not(:disabled) { background: var(--blush); }
+.calendar-nav button:disabled { opacity: 0.3; cursor: default; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.weekday { padding: 6px 0; text-align: center; font-size: 0.7rem; letter-spacing: 0.1em; color: #9a7b85; }
+.day { aspect-ratio: 1; border: 0; border-radius: 50%; background: rgba(201, 133, 146, 0.14); color: var(--ink); font-size: 0.95rem; transition: background 0.3s, color 0.3s, transform 0.3s var(--ease); }
+.day:hover:not(:disabled) { background: var(--rose); transform: scale(1.08); }
+.day:disabled { background: none; color: #bfa9b0; cursor: default; }
+.day.is-on { background: var(--ink); color: var(--cream); }
+.times { margin-top: 22px; }
+.time-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin-top: 10px; max-width: 520px; }
+.time { padding: 0.75em 0; border: 1px solid rgba(42, 16, 25, 0.18); border-radius: 999px; background: #fff; font-size: 0.92rem; transition: background 0.3s, color 0.3s, border-color 0.3s; }
+.time:hover { border-color: var(--rose-deep); }
+.time.is-on { background: var(--ink); border-color: var(--ink); color: var(--cream); }
+.summary { align-self: start; padding: 28px; border-radius: 20px; background: var(--ink); color: var(--cream); }
+.summary h3 { margin-bottom: 18px; font: 300 1.9rem/1 var(--serif); }
+.summary dl > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid rgba(252, 244, 240, 0.14); }
+.summary dt { font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: #cfb3ba; }
+.summary dd { text-align: right; }
+.summary .total dd { font: 500 1.7rem/1 var(--serif); }
+.summary .hint { color: #cfb3ba; }
+.summary .form-error { color: #ffc2cb; }
+.summary .btn { margin-top: 18px; }
+.done { max-width: 640px; margin: 0 auto; padding: clamp(8px, 3vw, 32px) 0; text-align: center; }
+.done .eyebrow { justify-content: center; color: #9a5063; }
+.done h3 { margin-bottom: 18px; font: 300 clamp(2.2rem, 5vw, 3.4rem)/1.05 var(--serif); }
+.done p { margin-top: 14px; color: #5b3a45; }
+.done .done-when { font: 400 1.5rem/1.4 var(--serif); color: var(--ink); }
+.done-link { margin-top: 32px; padding: 20px; border: 1px dashed rgba(42, 16, 25, 0.3); border-radius: 14px; word-break: break-all; }
+.done-link p { margin: 0 0 8px; font-size: 0.9rem; }
+.done-link a { display: block; margin-bottom: 10px; font-size: 0.85rem; text-decoration: underline; }
+@media (min-width: 960px) {
+  .booking-form { grid-template-columns: 1fr 340px; gap: 56px; }
+  .summary { position: sticky; top: 100px; }
+}
+
+/* ---------- Különálló oldalak (kezelés, admin) ---------- */
+.page-shell { min-height: 100vh; background: radial-gradient(50% 40% at 80% 0, rgba(201, 100, 130, 0.2), transparent 70%), var(--night); }
+.page-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px var(--gutter); }
+.page-main { max-width: 720px; margin: clamp(24px, 6vw, 72px) auto 80px; padding: 0 var(--gutter); }
+.page-main.is-wide { max-width: 1100px; }
+.status-card { padding: clamp(24px, 5vw, 48px); border: 1px solid var(--line); border-radius: 24px; background: rgba(255, 255, 255, 0.03); }
+.status-card h1 { margin-bottom: 18px; font: 300 clamp(2.4rem, 6vw, 3.6rem)/1.05 var(--serif); }
+.status-card h1 em { font-style: italic; color: var(--rose); }
+.status-card > p { margin-top: 14px; color: #d4bcc1; }
+.status-list { margin: 24px 0; }
+.status-list > div { display: flex; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.status-list dt { font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.status-list dd { text-align: right; }
+.status-actions { margin: 24px 0; }
+.status-actions p { margin-bottom: 14px; }
+.status-cancel { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.status-cancel .btn { margin-right: 16px; }
+.pill { display: inline-block; padding: 0.35em 0.95em; border: 1px solid; border-radius: 999px; font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase; }
+.pill-ok { color: #a8e3bd; border-color: rgba(168, 227, 189, 0.45); }
+.pill-wait { color: var(--gold); border-color: rgba(220, 181, 147, 0.5); }
+.pill-off { color: var(--muted); border-color: var(--line); }
+.pill-warn { color: #ffb4be; border-color: rgba(255, 180, 190, 0.45); }
+
+.admin-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 28px; margin-bottom: 28px; }
+.admin-top h1 { font: 300 clamp(2rem, 4vw, 3rem)/1 var(--serif); }
+.admin-tabs { display: flex; gap: 6px; }
+.admin-tabs button { padding: 0.65em 1.2em; border: 1px solid var(--line); border-radius: 999px; background: none; font-size: 0.8rem; letter-spacing: 0.1em; }
+.admin-tabs button.is-on { background: var(--rose); border-color: var(--rose); color: var(--ink); }
+.admin-day { margin-top: 32px; }
+.admin-day h2 { margin-bottom: 14px; font: 400 1.5rem var(--serif); color: var(--rose); }
+.admin-card { display: grid; gap: 14px; margin-bottom: 12px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255, 255, 255, 0.03); }
+.admin-card.is-off { opacity: 0.55; }
+.admin-time { font: 400 1.7rem/1 var(--serif); color: var(--cream); }
+.admin-info a { text-decoration: underline; text-underline-offset: 0.2em; }
+.admin-info p { margin-top: 6px; font-size: 0.92rem; color: #d4bcc1; }
+.admin-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-note { font-style: italic; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 8px; align-content: start; }
+.admin-actions button { padding: 0.6em 1.1em; border: 1px solid var(--rose-deep); border-radius: 999px; background: none; font-size: 0.78rem; transition: background 0.3s, color 0.3s; }
+.admin-actions button:hover { background: var(--rose); color: var(--ink); }
+.admin-actions .is-quiet { border-color: var(--line); color: var(--muted); }
+.admin-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 16px; margin-bottom: 24px; }
+.admin-inline .field { flex: 1 1 200px; }
+.admin-inline .btn { margin-bottom: 18px; }
+@media (min-width: 760px) {
+  .admin-card { grid-template-columns: 110px 1fr auto; gap: 24px; align-items: start; }
+}

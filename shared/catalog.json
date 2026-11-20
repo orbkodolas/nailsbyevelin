@@ -1,0 +1,85 @@
+{
+  "pricesValidFrom": "2027-01-01",
+  "pricesValidFromText": "2027. január 1-jétől",
+  "categories": [
+    {
+      "id": "gel",
+      "name": "Géllakk",
+      "durationMinutes": 120,
+      "blurb": "Tartós, tükörfényű szín a természetes körmödre.",
+      "items": [
+        { "id": "gel-egyszinu", "name": "Egyszínű géllakk", "priceHuf": 5000 },
+        { "id": "gel-erositett", "name": "Erősített géllakk", "priceHuf": 5500 },
+        { "id": "gel-francia", "name": "Francia géllakk", "priceHuf": 6000 }
+      ]
+    },
+    {
+      "id": "epites",
+      "name": "Műköröm építés",
+      "durationMinutes": 150,
+      "blurb": "Egyedi forma és hossz, pontosan rád szabva.",
+      "items": [
+        { "id": "epites-s", "name": "S méret", "priceHuf": 6500 },
+        { "id": "epites-m", "name": "M méret", "priceHuf": 7000 },
+        { "id": "epites-l", "name": "L méret", "priceHuf": 7500 },
+        { "id": "epites-xl", "name": "XL méret", "priceHuf": 8000 }
+      ]
+    },
+    {
+      "id": "toltes",
+      "name": "Műköröm töltés",
+      "durationMinutes": 120,
+      "blurb": "A lenőtt köröm frissítése, új színnel vagy mintával.",
+      "items": [
+        { "id": "toltes-s", "name": "S méret", "priceHuf": 6000 },
+        { "id": "toltes-m", "name": "M méret", "priceHuf": 6500 },
+        { "id": "toltes-l", "name": "L méret", "priceHuf": 7000 },
+        { "id": "toltes-xl", "name": "XL méret", "priceHuf": 7500 }
+      ]
+    }
+  ],
+  "extras": [
+    { "name": "Babyboomer", "price": "300 Ft / ujj" },
+    { "name": "Matrica", "price": "500 Ft / kéz" },
+    { "name": "Alap kövezés (1-1 ujj)", "price": "az ár tartalmazza" },
+    { "name": "További kövezés", "price": "500 Ft / kéz" },
+    { "name": "Porcelán virág", "price": "500 Ft / kéz" },
+    { "name": "Króm por", "price": "150 Ft / ujj" },
+    { "name": "Beépített francia", "price": "+1 000 Ft" },
+    { "name": "Beépített glitter", "price": "+1 000 Ft" }
+  ],
+  "otherServices": [
+    { "name": "Köröm eltávolítása manikűrrel", "price": "2 000 Ft" },
+    { "name": "Más által készített köröm javítása / töltése", "price": "+1 500 Ft" },
+    { "name": "Letört köröm pótlása (1 hét után)", "price": "350 Ft / ujj" }
+  ],
+  "voucher": {
+    "presets": [10000, 15000, 20000, 25000],
+    "minHuf": 5000,
+    "maxHuf": 100000,
+    "validMonths": 3,
+    "redeemableFor": "körömépítésre vagy géllakkra"
+  },
+  "rules": [
+    {
+      "id": "punctual",
+      "title": "Pontosság",
+      "text": "Kérlek, pontosan érkezz. 30 perces késésnél nem tudom elvállalni a munkát: új időpontot kell foglalnod, és az elmaradt alkalom díját is rendezni kell az új szolgáltatás díján felül."
+    },
+    {
+      "id": "time",
+      "title": "Idő",
+      "text": "Minden szett legalább 2 órát vesz igénybe. A precíz munka időt kér, ezért kérlek, ne sürgess közben."
+    },
+    {
+      "id": "alone",
+      "title": "Kísérő nélkül",
+      "text": "Kérlek, ne hozz magaddal kísérőt, kivéve ha közvetlenül egymás után van időpontotok, és együtt érkeztek."
+    },
+    {
+      "id": "cancel",
+      "title": "Lemondás",
+      "text": "Ha közbejön valami, semmi gond, csak szólj. A visszaigazoló e-mailben lévő linkkel egy kattintással lemondhatod. Szó nélküli meg nem jelenés után új időpont csak a szolgáltatás 100%-ának előre fizetésével foglalható."
+    }
+  ]
+}
