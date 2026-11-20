@@ -1,6 +1,6 @@
 export type Photo = { name: string; w: number; h: number; alt: string; caption: string; focus?: string }
 
-// A /public/images alatt: <név>.webp (1080 px) és <név>-sm.webp (640 px)
+// A /public/images alatt: <név>.webp (≤1080 px), <név>-sm.webp (640 px), <név>-xs.webp (400 px) – tools/convert-images.sh
 export const photos: Record<string, Photo> = {
   'chanel-black': { name: 'chanel-black', w: 1080, h: 1216, alt: 'Fekete körmök strasszos díszekkel', caption: 'Fekete, díszekkel' },
   'french-flower': { name: 'french-flower', w: 1080, h: 2033, alt: 'Francia köröm kék virágmintával', caption: 'Francia, virággal', focus: '50% 38%' },
@@ -15,5 +15,4 @@ export const photos: Record<string, Photo> = {
   'burgundy-french': { name: 'burgundy-french', w: 1080, h: 1161, alt: 'Bordó végű francia körmök', caption: 'Bordó francia' },
   'christmas-wonder': { name: 'christmas-wonder', w: 1080, h: 1182, alt: 'Egy kis karácsonyi csoda – Nails by Evelin', caption: 'Karácsonyi csoda' },
   voucher: { name: 'voucher', w: 1080, h: 712, alt: 'Karácsonyi ajándékutalvány – Nails by Evelin', caption: 'Ajándékutalvány' },
-  logo: { name: 'logo', w: 1151, h: 1151, alt: 'Nails by Evelin logó', caption: 'Logó' },
 }
