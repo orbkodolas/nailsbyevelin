@@ -16,8 +16,8 @@ export function Pricing() {
     <section className="pricing section-light" id="arlista">
       <div className="section-head">
         <p className="eyebrow" data-reveal><span className="eyebrow-line" />Árlista</p>
-        <Headline text={'Átlátható *árak,*\nmeglepetések nélkül.'} />
-        <p className="section-sub" data-reveal>Az árlista {catalog.pricesValidFromText} érvényes. A díszítések és extrák az alapár mellé jönnek, ezekről a helyszínen egyeztetünk.</p>
+        <Headline text={'Átlátható *árak.*'} />
+        <p className="section-sub" data-reveal>Az árlista {catalog.pricesValidFromText} érvényes. Az extrák az alapár mellé jönnek.</p>
       </div>
       <div className="pricing-main">
         {catalog.categories.map((category) => (

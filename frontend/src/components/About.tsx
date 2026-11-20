@@ -9,14 +9,9 @@ export function About() {
         <div className="frame frame-side" data-clip data-delay="0.2" data-parallax="0.12"><Photo id="mocha-crystals" sizes="(min-width: 900px) 18vw, 40vw" /></div>
       </div>
       <div className="about-copy">
-        <p className="eyebrow" data-reveal><span className="eyebrow-line" />Evelin</p>
         <Headline text={'Precizitás,\nodafigyelés, *idő.*'} />
-        <p data-reveal>Minden körmöt úgy készítek el, mintha a sajátom lenne: lassan, pontosan, kapkodás nélkül. Egy szett legalább két óra, mert a munkám precizitást és figyelmet igényel.</p>
-        <p data-reveal>Kedves vagyok és rugalmas, de az én időm is ugyanannyit ér, mint a tiéd. Ezért van az online foglalás: látod a szabad időpontokat, kapsz emlékeztetőt, és ha közbejön valami, egy kattintással lemondhatod.</p>
-        <blockquote data-reveal>
-          <p>A minőség számomra fontosabb, mint a sietség.</p>
-          <cite>Evelin</cite>
-        </blockquote>
+        <p data-reveal>Minden körmöt úgy készítek el, mintha a sajátom lenne: lassan, pontosan.</p>
+        <p data-reveal>Kedves és rugalmas vagyok, de az én időm is ugyanannyit ér, mint a tiéd.</p>
       </div>
     </section>
   )

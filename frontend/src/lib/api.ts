@@ -39,4 +39,5 @@ export const createBooking = (payload: Record<string, unknown>) => request<Creat
 export const getBooking = (id: string, token: string) => request<PublicBooking>(`/api/bookings/${id}`, { headers: { 'x-manage-token': token } })
 export const bookingAction = (id: string, token: string, action: 'confirm' | 'cancel') => request<PublicBooking>(`/api/bookings/${id}/${action}`, { method: 'POST', body: { token } })
 export const payBooking = (id: string, token: string, paymentMethod?: string) => request<{ payment: Payment }>(`/api/bookings/${id}/pay`, { method: 'POST', body: { token, paymentMethod } })
-export const createVoucher = (payload: Record<string, unknown>) => request<{ id: string; amountHuf: number; payment: Payment }>('/api/vouchers', { method: 'POST', body: payload })
+export const payDemo = (paymentId: string, card: string) => request<{ ok: true }>(`/api/payments/demo/${paymentId}`, { method: 'POST', body: { card } })
+export const createVoucher =(payload: Record<string, unknown>) => request<{ id: string; amountHuf: number; payment: Payment }>('/api/vouchers', { method: 'POST', body: payload })

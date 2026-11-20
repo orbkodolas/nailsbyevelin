@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { gsap, reducedMotion } from '../lib/motion'
 import { Headline } from './Headline'
 import { Photo } from './Photo'
-import { Glitter } from './Glitter'
 
 const ringText = 'Nails by Evelin · Műköröm · Géllakk ·'
 
@@ -13,22 +12,21 @@ export function Hero() {
     const scope = root.current
     if (!scope || reducedMotion()) return
     const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ defaults: { ease: 'power4.out' } })
-      tl.from('.hero .wi', { yPercent: 115, duration: 1.3, stagger: 0.12 }, 0.15)
-        .from('[data-hero="fade"]', { y: 24, autoAlpha: 0, duration: 1, stagger: 0.12 }, 0.5)
-        .from('.arch', { clipPath: 'inset(100% 0% 0% 0%)', duration: 1.6, ease: 'power4.inOut' }, 0.2)
-        .from('.arch img', { scale: 1.35, duration: 2.2, ease: 'power3.out' }, 0.2)
-        .from('.arch-ring', { autoAlpha: 0, scale: 0.94, duration: 1.4 }, 0.9)
-        .from('.badge', { autoAlpha: 0, scale: 0.6, rotation: -60, duration: 1.4 }, 1.1)
-      gsap.to('.badge-ring', { rotation: 360, duration: 28, repeat: -1, ease: 'none', transformOrigin: '50% 50%' })
-      gsap.to('.arch img', { yPercent: 6, ease: 'none', scrollTrigger: { trigger: scope, start: 'top top', end: 'bottom top', scrub: true } })
+      // Teljes belépés ≤1.2 s: címsor-szavak maszkból, kép finom felfedése, a többi rövid fade
+      const tl = gsap.timeline({ defaults: { ease: 'expo.out' } })
+      tl.from('.hero .wi', { yPercent: 100, duration: 0.8, stagger: 0.07 }, 0.1)
+        .from('.arch', { clipPath: 'inset(8% 8% 8% 8% round 28px)', duration: 1.1 }, 0.1)
+        .from('.arch img', { scale: 1.08, duration: 1.1, ease: 'power3.out' }, 0.1)
+        .from('[data-hero="fade"]', { y: 16, autoAlpha: 0, duration: 0.7, stagger: 0.05, ease: 'power3.out' }, 0.3)
+        .from('.arch-ring', { autoAlpha: 0, duration: 0.6, ease: 'power2.out' }, 0.5)
+        .from('.badge', { autoAlpha: 0, y: 10, duration: 0.6, ease: 'power3.out' }, 0.6)
+      gsap.to('.arch img', { yPercent: 4, ease: 'none', scrollTrigger: { trigger: scope, start: 'top top', end: 'bottom top', scrub: true } })
     }, scope)
     return () => ctx.revert()
   }, [])
 
   return (
     <section className="hero" id="kezdo" ref={root}>
-      <Glitter className="hero-glitter" count={46} />
       <div className="hero-inner">
         <div className="hero-copy">
           <p className="eyebrow" data-hero="fade"><span className="eyebrow-line" />Műköröm · Géllakk · Töltés</p>

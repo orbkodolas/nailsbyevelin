@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { ApiError, bookingAction, getBooking, payBooking, type Payment, type PublicBooking } from '../lib/api'
 import { forint } from '../lib/catalog'
 import { formatWhen } from '../lib/dates'
-import { PageShell } from '../components/PageShell'
+import { Modal } from '../components/Modal'
+import { DemoPayment } from '../components/DemoPayment'
 
 const STATUS: Record<string, { label: string; tone: 'ok' | 'wait' | 'off' }> = {
   booked: { label: 'Rögzítve', tone: 'ok' }, pending_payment: { label: 'Fizetésre vár', tone: 'wait' }, cancelled: { label: 'Lemondva', tone: 'off' },
@@ -15,6 +16,7 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
   const [busy, setBusy] = useState(false)
   const [askCancel, setAskCancel] = useState(false)
   const [payment, setPayment] = useState<Payment | null>(null)
+  const [payOpen, setPayOpen] = useState(false)
 
   const load = useCallback(() => getBooking(id, token).then(setBooking).catch((reason: unknown) => {
     setError(reason instanceof ApiError && reason.status === 404 ? 'Ez a link nem érvényes, vagy a foglalás már nem található.' : reason instanceof Error ? reason.message : 'Hiba történt.')
@@ -35,10 +37,12 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
   const pay = () => run(async () => {
     const result = await payBooking(id, token)
     setPayment(result.payment)
-    if (result.payment.checkoutUrl) window.location.assign(result.payment.checkoutUrl)
+    if (result.payment.provider === 'demo') setPayOpen(true)
+    else if (result.payment.checkoutUrl) window.location.assign(result.payment.checkoutUrl)
   })
+  const onPaid = useCallback(() => { setPayOpen(false); load() }, [load])
 
-  if (!booking) return <PageShell><div className="status-card">{error ? <p className="form-error" role="alert">{error}</p> : <p>Betöltés…</p>}</div></PageShell>
+  if (!booking) return <div className="manage">{error ? <p className="form-error" role="alert">{error}</p> : <p className="hint">Betöltés…</p>}</div>
 
   const info = STATUS[booking.status] ?? { label: booking.status, tone: 'off' as const }
   const active = booking.status === 'booked'
@@ -46,10 +50,8 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
   const confirmed = booking.confirmationStatus === 'confirmed'
 
   return (
-    <PageShell>
-      <div className="status-card">
-        <p className="eyebrow"><span className="eyebrow-line" />A foglalásod</p>
-        <h1>{booking.firstName}, <em>{active && confirmed ? 'várlak!' : 'az időpontod'}</em></h1>
+    <div className="manage">
+      <h3 className="manage-title">{booking.firstName}, <em>{active && confirmed ? 'várlak!' : 'az időpontod'}</em></h3>
         <p className={`pill pill-${info.tone}`}>{active && confirmed ? 'Megerősítve' : info.label}</p>
         <dl className="status-list">
           <div><dt>Szolgáltatás</dt><dd>{booking.serviceName}</dd></div>
@@ -86,7 +88,11 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
           </div>
         )}
         {error && <p className="form-error" role="alert">{error}</p>}
-      </div>
-    </PageShell>
+        {payment?.provider === 'demo' && (
+          <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Fizetés">
+            <DemoPayment payment={payment} onPaid={onPaid} onCancel={() => setPayOpen(false)} />
+          </Modal>
+        )}
+    </div>
   )
 }

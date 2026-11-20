@@ -1,5 +1,4 @@
 import { site } from '../lib/site'
-import { Sparkle } from './Sparkle'
 
 const YEAR = new Date().getFullYear()
 
@@ -20,8 +19,8 @@ export function Footer() {
         </ul>
       </div>
       <div className="footer-bottom">
-        <span><Sparkle /> © {YEAR} Nails by Evelin</span>
-        <span>Az időpontfoglaláshoz megadott adataidat (név, telefon, e-mail) kizárólag a foglalás intézéséhez használom.</span>
+        <span>© {YEAR} Nails by Evelin</span>
+        <span>A foglaláshoz megadott adataidat kizárólag a foglalás intézéséhez használom.</span>
         <a href="#/admin" className="footer-admin">Admin</a>
       </div>
     </footer>

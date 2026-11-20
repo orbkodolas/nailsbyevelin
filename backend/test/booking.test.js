@@ -216,3 +216,27 @@ test('Demó fizetés: rossz kártya elutasítva, a 4242-es véglegesíti az idő
     await app.idle()
   })
 })
+
+test('Demó fizetés JSON végpont: elutasított és hibás kártya, a 4242 véglegesít, újra-hívás idempotens', async () => {
+  await withApi({ config: { depositPercent: 30, paymentProviders: ['demo'], demoPayments: true, publicUrl: 'https://site.test/app', apiUrl: 'http://api.test' } }, async ({ call, base, app }) => {
+    const booking = await (await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-11-24', '09:00') }))).json()
+    const paymentId = new URL(booking.payment.checkoutUrl).pathname.split('/').pop()
+    const pay = (id, card) => fetch(`${base}/api/payments/demo/${id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ card }) })
+    const declined = await pay(paymentId, '4000 0000 0000 0002')
+    assert.equal(declined.status, 402)
+    assert.deepEqual(await declined.json(), { error: 'card_declined', message: 'A kártyát elutasították (teszt).' })
+    const invalid = await pay(paymentId, '5555 5555 5555 4444')
+    assert.equal(invalid.status, 402)
+    assert.equal((await invalid.json()).error, 'card_invalid')
+    assert.equal((await (await call('GET', `/api/bookings/${booking.id}?token=${booking.manageToken}`)).json()).status, 'pending_payment')
+    const ok = await pay(paymentId, '4242 4242 4242 4242')
+    assert.equal(ok.status, 200)
+    assert.deepEqual(await ok.json(), { ok: true })
+    const again = await pay(paymentId, '4000 0000 0000 0002')
+    assert.equal(again.status, 200) // már kifizetett: idempotens
+    const paid = await (await call('GET', `/api/bookings/${booking.id}?token=${booking.manageToken}`)).json()
+    assert.equal(paid.status, 'booked')
+    assert.equal((await fetch(`${base}/api/payments/demo/nincs-ilyen`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 404)
+    await app.idle()
+  })
+})

@@ -1,11 +1,12 @@
-import { useEffect, useRef } from 'react'
-import { useRoute } from './lib/useRoute'
+import { useEffect, useRef, useState } from 'react'
+import { useRoute, type Route } from './lib/useRoute'
 import { ScrollTrigger, getLenis, initSmoothScroll, scrollToTarget } from './lib/motion'
 import { useScrollEffects } from './lib/useScrollEffects'
-import { Cursor } from './components/Cursor'
+import { openBooking } from './lib/bookingModal'
 import { Header } from './components/Header'
 import { Hero } from './components/Hero'
-import { Marquee } from './components/Marquee'
+import { Modal } from './components/Modal'
+import { BookingModal } from './components/BookingModal'
 import { About } from './components/About'
 import { Services } from './components/Services'
 import { Gallery } from './components/Gallery'
@@ -29,9 +30,13 @@ function Home() {
     document.fonts?.ready.then(refresh)
     window.addEventListener('load', refresh)
     const timer = window.setTimeout(refresh, 1200)
-    // Közvetlen horgony-link (pl. /#arlista) megnyitásakor a megfelelő szekcióhoz görget
+    // Közvetlen horgony-link (pl. /#arlista) megnyitásakor a megfelelő szekcióhoz görget; #idopont esetén a foglaló modál nyílik
     const hash = window.location.hash
-    const jump = hash && !hash.startsWith('#/') && document.querySelector(hash) ? window.setTimeout(() => { refresh(); scrollToTarget(hash, hash === '#kezdo' ? 0 : -72) }, 900) : 0
+    const jump = hash && !hash.startsWith('#/') && document.querySelector(hash) ? window.setTimeout(() => {
+      refresh()
+      if (hash === '#idopont') openBooking()
+      else scrollToTarget(hash, hash === '#kezdo' ? 0 : -72)
+    }, 900) : 0
     return () => { window.removeEventListener('load', refresh); window.clearTimeout(timer); window.clearTimeout(jump) }
   }, [])
 
@@ -40,7 +45,6 @@ function Home() {
       <Header />
       <main>
         <Hero />
-        <Marquee />
         <About />
         <Services />
         <Gallery />
@@ -56,7 +60,12 @@ function Home() {
 }
 
 export default function App() {
-  const route = useRoute()
+  const { route, closeRoute } = useRoute()
+  const isOverlay = route.name === 'manage' || route.name === 'voucher-thanks'
+  // Záráskor a tartalom a kilépő animáció alatt megmarad
+  const [lastOverlay, setLastOverlay] = useState<Route | null>(null)
+  if (isOverlay && route !== lastOverlay) setLastOverlay(route)
+  const overlay = isOverlay ? route : lastOverlay
 
   useEffect(() => initSmoothScroll(), [])
 
@@ -66,6 +75,8 @@ export default function App() {
       const link = (event.target as Element).closest<HTMLAnchorElement>('a[href^="#"]')
       const href = link?.getAttribute('href')
       if (!link || !href || href === '#' || href.startsWith('#/') || event.defaultPrevented || event.metaKey || event.ctrlKey) return
+      // Időpontfoglalás: a foglaló modál nyílik, nem görgetés
+      if (href === '#idopont') { event.preventDefault(); openBooking(); return }
       if (!document.querySelector(href)) return
       event.preventDefault()
       scrollToTarget(href, href === '#kezdo' ? 0 : -72)
@@ -75,18 +86,24 @@ export default function App() {
     return () => document.removeEventListener('click', onClick)
   }, [])
 
-  // Útvonalváltáskor az oldal tetejére
+  // Az admin külön oldal: váltáskor az oldal tetejére (a modálos útvonalak nem görgetnek)
+  const prevName = useRef(route.name)
   useEffect(() => {
+    const prev = prevName.current
+    prevName.current = route.name
+    if (route.name !== 'admin' && prev !== 'admin') return
     const lenis = getLenis()
     if (lenis) lenis.scrollTo(0, { immediate: true }); else window.scrollTo(0, 0)
   }, [route.name])
 
   return (
     <>
-      <Cursor />
-      {route.name === 'home' && <Home />}
-      {route.name === 'manage' && <ManageBooking id={route.id} token={route.token} query={route.query} />}
-      {route.name === 'voucher-thanks' && <VoucherThanks />}
+      {route.name !== 'admin' && <Home />}
+      <BookingModal />
+      <Modal open={isOverlay} onClose={closeRoute} title={overlay?.name === 'voucher-thanks' ? 'Ajándékutalvány' : 'A foglalásod'}>
+        {overlay?.name === 'manage' && <ManageBooking id={overlay.id} token={overlay.token} query={overlay.query} />}
+        {overlay?.name === 'voucher-thanks' && <VoucherThanks />}
+      </Modal>
       {route.name === 'admin' && <Admin />}
     </>
   )

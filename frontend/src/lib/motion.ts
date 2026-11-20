@@ -10,10 +10,10 @@ export const finePointer = () => window.matchMedia('(hover: hover) and (pointer:
 let lenis: Lenis | null = null
 export const getLenis = () => lenis
 
-// Finom görgetés (csak mutatóeszközön/billentyűzeten; érintésen natív marad) + ScrollTrigger szinkron
+// Gyors, érzékeny görgetés (csak mutatóeszközön; érintésen natív marad) + ScrollTrigger szinkron
 export function initSmoothScroll() {
   if (reducedMotion()) return () => {}
-  const instance = new Lenis({ lerp: 0.1, wheelMultiplier: 0.9 })
+  const instance = new Lenis({ lerp: 0.12, wheelMultiplier: 1 })
   lenis = instance
   instance.on('scroll', ScrollTrigger.update)
   const tick = (time: number) => instance.raf(time * 1000)
@@ -25,7 +25,7 @@ export function initSmoothScroll() {
 export function scrollToTarget(target: string | number, offset = -72) {
   const element = typeof target === 'string' ? document.querySelector(target) : null
   const reduced = reducedMotion()
-  if (lenis) lenis.scrollTo(typeof target === 'string' ? (element as HTMLElement) ?? 0 : target, { offset, duration: 1.4, easing: (t: number) => 1 - Math.pow(1 - t, 4) })
+  if (lenis) lenis.scrollTo(typeof target === 'string' ? (element as HTMLElement) ?? 0 : target, { offset, duration: reduced ? 0.01 : 1, easing: (t: number) => 1 - Math.pow(1 - t, 4) })
   else if (element) element.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
 }
 

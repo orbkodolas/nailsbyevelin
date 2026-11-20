@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react'
 import { catalog, forint } from '../lib/catalog'
 import { createVoucher, getSettings, type Payment, type PaymentMethod } from '../lib/api'
 import { finePointer, gsap } from '../lib/motion'
+import { DemoPayment } from './DemoPayment'
 import { Headline } from './Headline'
+import { Modal } from './Modal'
 import { Photo } from './Photo'
 import { PaymentPicker } from './PaymentPicker'
 
@@ -15,6 +17,9 @@ export function Voucher() {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [payment, setPayment] = useState<Payment | null>(null)
+  const [demoPayment, setDemoPayment] = useState<Payment | null>(null)
+  const [payOpen, setPayOpen] = useState(false)
+  const [thanks, setThanks] = useState(false)
   const card = useRef<HTMLDivElement>(null)
 
   useEffect(() => { getSettings().then((s) => { setMethods(s.paymentMethods); setMethod(s.paymentMethods[0]?.id ?? '') }).catch(() => {}) }, [])
@@ -40,14 +45,21 @@ export function Voucher() {
         amountHuf: value, buyerName: form.get('buyerName'), buyerEmail: form.get('buyerEmail'), recipientName: form.get('recipientName'),
         message: form.get('message'), website: form.get('website'), paymentMethod: method || undefined,
       })
-      setPayment(result.payment)
-      if (result.payment.checkoutUrl) window.location.assign(result.payment.checkoutUrl)
+      if (result.payment.provider === 'demo') {
+        setDemoPayment(result.payment)
+        setPayOpen(true)
+      } else {
+        setPayment(result.payment)
+        if (result.payment.checkoutUrl) window.location.assign(result.payment.checkoutUrl)
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'A rendelés nem sikerült.')
     } finally {
       setSending(false)
     }
   }
+
+  const onPaid = useCallback(() => { setPayOpen(false); setThanks(true) }, [])
 
   return (
     <section className="voucher" id="utalvany">
@@ -60,7 +72,9 @@ export function Voucher() {
           <Headline text={'Ajándékozz egy\n*szép pillanatot.*'} />
           <p data-reveal>Az utalvány {validMonths} hónapig érvényes, {redeemableFor} váltható be. A rendelés után a kódot e-mailben kapod meg.</p>
 
-          {payment ? (
+          {thanks ? (
+            <div className="notice" role="status" data-reveal><b>Köszönöm!</b> Az utalványt e-mailben küldöm.</div>
+          ) : payment ? (
             <div className="notice" role="status" data-reveal>
               <b>Köszönöm a rendelést!</b>
               {payment.instructions ? <> {payment.instructions} Fizetendő: <b>{forint(payment.amountHuf)}</b>. Az utalvány a fizetés beérkezése után válik aktívvá.</> : payment.error ? ' A fizetési oldal most nem érhető el, kérlek, próbáld újra később.' : ' Átirányítalak a fizetéshez…'}
@@ -89,6 +103,11 @@ export function Voucher() {
               {error && <p className="form-error" role="alert">{error}</p>}
               <button className="btn btn-primary" type="submit" disabled={sending}><span>{sending ? 'Küldés…' : `Megrendelem · ${forint(custom ? Number(custom) || 0 : amount)}`}</span></button>
             </form>
+          )}
+          {demoPayment && (
+            <Modal open={payOpen} onClose={() => setPayOpen(false)} title="Fizetés">
+              <DemoPayment payment={demoPayment} onPaid={onPaid} onCancel={() => setPayOpen(false)} />
+            </Modal>
           )}
         </div>
       </div>

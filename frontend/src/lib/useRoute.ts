@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 export type Route =
   | { name: 'home' }
@@ -23,5 +23,12 @@ export function useRoute() {
     window.addEventListener('hashchange', onChange)
     return () => window.removeEventListener('hashchange', onChange)
   }, [])
-  return route
+
+  // Modál bezárása: a hash törlése replaceState-tel (nincs hashchange, nincs görgetés/újratöltés)
+  const closeRoute = useCallback(() => {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+    setRoute({ name: 'home' })
+  }, [])
+
+  return { route, closeRoute }
 }

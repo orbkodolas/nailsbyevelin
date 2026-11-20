@@ -408,6 +408,20 @@ export function createApp(options = {}) {
         return html(res, 200, demoPage({ payment, back: safeBack, error: declined ? 'A kártyát elutasították (teszt).' : 'Demó módban csak a 4242 4242 4242 4242 kártya fogadható el.' }))
       }
 
+      // ----- demó fizetés JSON végpont (beágyazott fizetőforma) -----
+      const demoApi = path.match(/^\/api\/payments\/demo\/([\w-]+)$/)
+      if (demoApi && req.method === 'POST') {
+        const payment = config.demoPayments ? (await store.read((state) => state.payments.find((item) => item.id === demoApi[1] && item.provider === 'demo'))) : null
+        if (!payment) return json(res, 404, { error: 'not_found' })
+        if (payment.status === 'paid') return json(res, 200, { ok: true })
+        const body = await readBody(req)
+        const digits = String(body.card ?? '').replace(/\D/g, '')
+        if (digits === '4000000000000002') return json(res, 402, { error: 'card_declined', message: 'A kártyát elutasították (teszt).' })
+        if (digits !== '4242424242424242') return json(res, 402, { error: 'card_invalid', message: 'Demó módban csak a 4242 4242 4242 4242 kártya fogadható el.' })
+        await settle('demo', { paymentId: payment.id, status: 'paid', amountHuf: payment.amountHuf })
+        return json(res, 200, { ok: true })
+      }
+
       // ----- fizetési szolgáltatók visszahívása -----
       const webhook = path.match(/^\/api\/payments\/webhook\/(\w+)$/)
       if (webhook && ['GET', 'POST'].includes(req.method)) {

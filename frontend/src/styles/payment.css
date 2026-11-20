@@ -1,0 +1,48 @@
+/* ---------- Demó fizetőforma (beágyazott) ---------- */
+.pay-demo { display: grid; gap: 20px; padding: 28px; border: 1px solid var(--line); border-radius: 14px; background: var(--wine); color: var(--text); }
+
+.pay-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.pay-eyebrow { margin: 0; font: 400 0.68rem/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; color: var(--rose-deep); }
+.pay-amount { display: grid; justify-items: end; gap: 6px; margin: 0; }
+.pay-amount-label { font: 400 0.68rem/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.pay-amount-value { font: 400 1.6rem/1 var(--serif); color: var(--rose); white-space: nowrap; }
+
+.pay-notice { margin: 0; padding: 12px 14px; border-left: 2px solid var(--rose-deep); border-radius: 4px 10px 10px 4px; background: rgba(234, 180, 189, 0.06); font: 300 0.88rem/1.5 var(--sans); color: var(--muted); }
+
+.pay-field { display: grid; gap: 8px; min-width: 0; }
+.pay-field label { font: 400 0.72rem/1 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.pay-field input {
+  width: 100%; padding: 14px 16px; border: 1px solid var(--field-border); border-radius: 10px; background: var(--field-bg); color: var(--field-text);
+  font: 300 1.02rem/1.4 var(--sans); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; transition: border-color 0.3s var(--ease), box-shadow 0.3s var(--ease);
+}
+.pay-field input::placeholder { color: rgba(185, 158, 166, 0.6); }
+.pay-field input:focus { outline: none; border-color: var(--rose-deep); box-shadow: 0 0 0 3px rgba(201, 133, 146, 0.22); }
+.pay-field input:disabled { opacity: 0.6; }
+
+.pay-row { display: grid; gap: 20px; grid-template-columns: 1fr 1fr; }
+
+.pay-fill { justify-self: start; padding: 0; border: 0; border-bottom: 1px solid var(--line); background: none; font: 400 0.72rem/1.2 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rose); cursor: pointer; transition: color 0.3s var(--ease), border-color 0.3s var(--ease); }
+.pay-fill:hover { color: var(--text); border-color: var(--rose); }
+.pay-fill:disabled { opacity: 0.5; cursor: default; }
+
+.pay-error { margin: 0; font: 400 0.9rem/1.5 var(--sans); color: #ffb4be; }
+
+.pay-actions { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; }
+.pay-cancel, .pay-submit { padding: 15px 22px; border-radius: 999px; font: 500 0.72rem/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer; transition: background-color 0.4s var(--ease), color 0.4s var(--ease), border-color 0.4s var(--ease), opacity 0.3s; }
+.pay-cancel { border: 1px solid var(--line); background: transparent; color: var(--muted); }
+.pay-cancel:hover:not(:disabled) { border-color: var(--rose); color: var(--text); }
+.pay-submit { border: 1px solid var(--rose); background: var(--rose); color: var(--night); }
+.pay-submit:hover:not(:disabled) { background: var(--rose-deep); border-color: var(--rose-deep); }
+.pay-submit:disabled { opacity: 0.45; cursor: default; }
+.pay-cancel:disabled { opacity: 0.45; cursor: default; }
+
+.pay-success { place-items: center; justify-items: center; padding: 48px 28px; text-align: center; }
+.pay-check { display: grid; place-items: center; width: 56px; height: 56px; border: 1px solid var(--rose-deep); border-radius: 50%; font: 400 1.4rem/1 var(--serif); color: var(--rose); }
+.pay-success-title { margin: 0; font: italic 400 1.5rem/1.2 var(--serif); color: var(--text); }
+
+@media (max-width: 480px) {
+  .pay-demo { padding: 22px 18px; }
+  .pay-row { grid-template-columns: 1fr 1fr; gap: 14px; }
+  .pay-actions { grid-template-columns: 1fr; }
+  .pay-cancel { order: 2; }
+}

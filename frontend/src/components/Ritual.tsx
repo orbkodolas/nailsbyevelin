@@ -3,10 +3,9 @@ import { gsap, reducedMotion } from '../lib/motion'
 import { Headline } from './Headline'
 
 const steps = [
-  { title: 'Válassz időpontot', text: 'Csak a valóban szabad idősávok látszanak, a kiválasztott szolgáltatás hosszához igazítva.' },
-  { title: 'Kapsz visszaigazolást', text: 'E-mailben megkapod az időpontot és a saját linkedet, amin később megerősítheted vagy lemondhatod.' },
-  { title: 'Emlékeztetünk', text: 'Egy nappal és két órával előtte jön egy üzenet. Ha nem tudsz jönni, egy kattintással szólsz.' },
-  { title: 'Gyere és pihenj', text: 'Pontosan, kísérő nélkül érkezz. A következő pár óra rólad szól.' },
+  { title: 'Válassz időpontot', text: 'Csak a szabad idősávok látszanak, a szolgáltatás hosszához igazítva.' },
+  { title: 'Kapsz visszaigazolást', text: 'E-mailben megkapod az időpontot és a kezelőlinket.' },
+  { title: 'Emlékeztetünk', text: 'Egy nappal és két órával előtte üzenetet küldünk.' },
 ]
 
 export function Ritual() {
@@ -24,9 +23,8 @@ export function Ritual() {
   return (
     <section className="ritual" id="folyamat">
       <div className="ritual-intro">
-        <p className="eyebrow" data-reveal><span className="eyebrow-line" />Így működik</p>
-        <Headline text={'Egyszerű, mint egy\n*jó rutin.*'} />
-        <p className="section-sub" data-reveal>Nincs oda-vissza üzenetváltás: a foglalás percek alatt megvan, a többit az emlékeztetők intézik.</p>
+        <p className="eyebrow" data-reveal><span className="eyebrow-line" />Foglalás</p>
+        <Headline text={'Három lépés\n*az időpontig.*'} />
       </div>
       <ol className="ritual-steps" ref={list}>
         <span className="ritual-line" ref={line} aria-hidden="true" />
