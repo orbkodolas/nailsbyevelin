@@ -89,13 +89,16 @@ ul, ol { padding: 0; list-style: none; }
 .mobile-menu {
   position: fixed; inset: 0; z-index: 1; display: flex; flex-direction: column; justify-content: center; gap: 36px; padding: 110px var(--gutter) 48px;
   background: radial-gradient(80% 50% at 80% 10%, rgba(201, 100, 130, 0.35), transparent 70%), var(--wine);
-  clip-path: circle(0 at calc(100% - 44px) 42px); visibility: hidden; transition: clip-path 0.9s var(--ease), visibility 0s 0.9s;
+  --burger-x: calc(100% - var(--gutter) - 23px);
+  /* Zárás: gyors, lineáris-közeli lecsengés (nem expo-out, ami az utolsó képkockákon vánszorog), a végén kifakul */
+  clip-path: circle(0 at var(--burger-x) 42px); opacity: 0; visibility: hidden;
+  transition: clip-path 0.5s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.12s linear 0.4s, visibility 0s 0.52s;
 }
-.is-open .mobile-menu { clip-path: circle(160% at calc(100% - 44px) 42px); visibility: visible; transition: clip-path 0.9s var(--ease), visibility 0s; }
+.is-open .mobile-menu { clip-path: circle(150% at var(--burger-x) 42px); opacity: 1; visibility: visible; transition: clip-path 0.8s var(--ease), opacity 0s, visibility 0s; }
 .mobile-menu nav { display: flex; flex-direction: column; }
-.mobile-menu nav a { display: flex; align-items: baseline; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); font: 300 clamp(2rem, 9vw, 3rem)/1.1 var(--serif); opacity: 0; transform: translateY(26px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
+.mobile-menu nav a { display: flex; align-items: baseline; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); font: 300 clamp(2rem, 9vw, 3rem)/1.1 var(--serif); opacity: 0; transform: translateY(26px); transition: opacity 0.2s linear, transform 0.3s ease-in; }
 .mobile-menu nav a small { font: 400 0.72rem var(--sans); letter-spacing: 0.2em; color: var(--rose); }
-.is-open .mobile-menu nav a { opacity: 1; transform: none; transition-delay: calc(var(--i) * 70ms + 300ms); }
+.is-open .mobile-menu nav a { opacity: 1; transform: none; transition: opacity 0.7s var(--ease) calc(var(--i) * 70ms + 300ms), transform 0.7s var(--ease) calc(var(--i) * 70ms + 300ms); }
 .mobile-menu-cta { align-self: flex-start; }
 @media (min-width: 1040px) {
   .nav-desktop, .header-cta { display: flex; }

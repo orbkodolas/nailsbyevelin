@@ -28,6 +28,7 @@ export function Header() {
 
   useEffect(() => {
     if (!open) return
+    setHidden(false) // különben a zárás első képkockáján a header transformja félreugratná a fixed menüt
     getLenis()?.stop()
     document.body.style.overflow = 'hidden'
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
