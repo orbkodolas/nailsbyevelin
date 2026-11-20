@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { gsap, reducedMotion } from '../lib/motion'
+import { gsap, reducedMotion, EASE_EXPO_OUT, EASE_POWER3_OUT } from '../lib/motion'
 import { Headline } from './Headline'
 import { Photo } from './Photo'
 
@@ -15,14 +15,19 @@ export function Hero() {
       // Teljes belépés ≤1.2 s: címsor-szavak maszkból, kép finom felfedése, a többi rövid fade
       const tl = gsap.timeline({ defaults: { ease: 'expo.out' } })
       tl.from('.hero .wi', { yPercent: 100, duration: 0.8, stagger: 0.07 }, 0.1)
-        .from('.arch', { clipPath: 'inset(8% 8% 8% 8% round 28px)', duration: 1.1 }, 0.1)
-        .from('.arch img', { scale: 1.08, duration: 1.1, ease: 'power3.out' }, 0.1)
         .from('[data-hero="fade"]', { y: 16, autoAlpha: 0, duration: 0.7, stagger: 0.05, ease: 'power3.out' }, 0.3)
         .from('.arch-ring', { autoAlpha: 0, duration: 0.6, ease: 'power2.out' }, 0.5)
         .from('.badge', { autoAlpha: 0, y: 10, duration: 0.6, ease: 'power3.out' }, 0.6)
       gsap.to('.arch img', { yPercent: 4, ease: 'none', scrollTrigger: { trigger: scope, start: 'top top', end: 'bottom top', scrub: true } })
     }, scope)
-    return () => ctx.revert()
+    // A kép felfedése WAAPI-val (kompozitorban fut; a `scale` összeadódik a GSAP-parallaxszal)
+    const arch = scope.querySelector<HTMLElement>('.arch')
+    const img = arch?.querySelector('img')
+    const anims = [
+      arch?.animate([{ clipPath: 'inset(8% 8% 8% 8% round 28px)' }, { clipPath: 'inset(0% 0% 0% 0% round 0px)' }], { duration: 1100, delay: 100, easing: EASE_EXPO_OUT, fill: 'backwards' }),
+      img?.animate([{ scale: '1.08' }, { scale: '1' }], { duration: 1100, delay: 100, easing: EASE_POWER3_OUT, fill: 'backwards' }),
+    ]
+    return () => { ctx.revert(); anims.forEach((a) => a?.cancel()) }
   }, [])
 
   return (

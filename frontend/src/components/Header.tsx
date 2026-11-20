@@ -24,14 +24,18 @@ export function Header() {
 
   useEffect(() => {
     let last = window.scrollY
-    const onScroll = () => {
+    let frame = 0
+    // Képkockánként legfeljebb egy állapot-frissítés (a scroll esemény 120 Hz-en többször is jöhet)
+    const update = () => {
+      frame = 0
       const y = window.scrollY
       setScrolled(y > 40)
       setHidden(y > last && y > 360)
       last = y
     }
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(update) }
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    return () => { window.removeEventListener('scroll', onScroll); window.cancelAnimationFrame(frame) }
   }, [])
 
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from 'react'
-import { gsap, ScrollTrigger, reducedMotion } from './motion'
+import { gsap, ScrollTrigger, reducedMotion, EASE_EXPO_OUT, EASE_POWER3_OUT } from './motion'
 
 // Visszafogott, egyszeri görgetés-animációk data-attribútumokkal:
 //  [data-words]   – címsor szavai maszkból, soron belül lépcsőzve csúsznak fel
@@ -10,6 +10,7 @@ export function useScrollEffects(ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const root = ref.current
     if (!root || reducedMotion()) return
+    const cleanups: (() => void)[] = []
     const ctx = gsap.context(() => {
       const words = gsap.utils.toArray<HTMLElement>('[data-words] .wi')
       if (words.length) {
@@ -34,11 +35,21 @@ export function useScrollEffects(ref: RefObject<HTMLElement | null>) {
         })
       }
 
+      // Kép-felfedés WAAPI-val: a clip-path és a különálló `scale` tulajdonság a kompozitorban animálódik,
+      // a `scale` pedig összeadódik a GSAP-parallax transformjával (nincs ütközés, nincs ugrás)
       gsap.utils.toArray<HTMLElement>('[data-clip]').forEach((el) => {
-        const delay = Number(el.dataset.delay || 0)
-        gsap.from(el, { clipPath: 'inset(100% 0% 0% 0%)', duration: 1.1, ease: 'expo.out', delay, scrollTrigger: { trigger: el, start: 'top 90%', once: true } })
+        const delay = Number(el.dataset.delay || 0) * 1000
         const img = el.querySelector('img')
-        if (img) gsap.from(img, { scale: 1.08, duration: 1.3, ease: 'power3.out', delay, scrollTrigger: { trigger: el, start: 'top 90%', once: true } })
+        el.style.clipPath = 'inset(100% 0% 0% 0%)'
+        ScrollTrigger.create({
+          trigger: el, start: 'top 90%', once: true,
+          onEnter: () => {
+            el.style.clipPath = ''
+            el.animate([{ clipPath: 'inset(100% 0% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)' }], { duration: 1100, delay, easing: EASE_EXPO_OUT, fill: 'backwards' })
+            img?.animate([{ scale: '1.08' }, { scale: '1' }], { duration: 1300, delay, easing: EASE_POWER3_OUT, fill: 'backwards' })
+          },
+        })
+        cleanups.push(() => { el.style.clipPath = ''; el.getAnimations().forEach((a) => a.cancel()); img?.getAnimations().forEach((a) => a.cancel()) })
       })
 
       gsap.utils.toArray<HTMLElement>('[data-parallax]').forEach((el) => {
@@ -48,6 +59,6 @@ export function useScrollEffects(ref: RefObject<HTMLElement | null>) {
         gsap.fromTo(img, { yPercent: -range }, { yPercent: range, ease: 'none', scrollTrigger: { trigger: el, start: 'top bottom', end: 'bottom top', scrub: true } })
       })
     }, root)
-    return () => ctx.revert()
+    return () => { ctx.revert(); cleanups.forEach((fn) => fn()) }
   }, [ref])
 }

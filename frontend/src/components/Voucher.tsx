@@ -30,9 +30,9 @@ export function Voucher() {
     const rect = card.current.getBoundingClientRect()
     const x = (event.clientX - rect.left) / rect.width - 0.5
     const y = (event.clientY - rect.top) / rect.height - 0.5
-    gsap.to(card.current, { rotationY: x * 8, rotationX: -y * 8, transformPerspective: 900, duration: 0.6, ease: 'power3.out' })
+    gsap.to(card.current, { rotationY: x * 8, rotationX: -y * 8, transformPerspective: 900, duration: 0.6, ease: 'power3.out', overwrite: 'auto' })
   }
-  const untilt = () => card.current && gsap.to(card.current, { rotationX: 0, rotationY: 0, duration: 0.9, ease: 'power3.out' })
+  const untilt = () => card.current && gsap.to(card.current, { rotationX: 0, rotationY: 0, duration: 0.9, ease: 'power3.out', overwrite: 'auto' })
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

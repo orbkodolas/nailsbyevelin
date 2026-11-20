@@ -22,7 +22,7 @@ export function Gallery() {
       gsap.to(rail, {
         x: () => -distance(), ease: 'none',
         scrollTrigger: {
-          trigger: section, start: 'top top', end: () => `+=${distance()}`, pin: true, scrub: 0.8, invalidateOnRefresh: true,
+          trigger: section, start: 'top top', end: () => `+=${distance()}`, pin: true, anticipatePin: 1, scrub: 0.8, invalidateOnRefresh: true,
           onUpdate: (self) => { if (bar.current) bar.current.style.transform = `scaleX(${self.progress})` },
         },
       })

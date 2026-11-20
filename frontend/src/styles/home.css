@@ -18,7 +18,7 @@ section { position: relative; }
 .hero-visual { position: relative; width: min(100%, 440px); aspect-ratio: 4 / 5.2; justify-self: center; }
 .arch, .arch-ring { position: absolute; border-radius: var(--radius); }
 .arch { inset: 0; overflow: hidden; background: var(--blush); }
-.arch img { width: 100%; height: 108%; object-fit: cover; object-position: 50% 30%; }
+.arch img { width: 100%; height: 108%; object-fit: cover; object-position: 50% 30%; will-change: transform; }
 .arch-ring { inset: -10px -10px 10px 10px; border: 1px solid var(--line); }
 .badge { position: absolute; left: 6px; bottom: 7%; width: clamp(96px, 26vw, 124px); aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; background: var(--night); border: 1px solid var(--line); }
 .badge-ring { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -41,7 +41,7 @@ section { position: relative; }
 .about-media { position: relative; padding-bottom: 12%; }
 .frame { position: relative; overflow: hidden; background: var(--blush); border-radius: var(--radius); }
 .frame img { width: 100%; height: 100%; object-fit: cover; }
-.frame[data-parallax] img { position: absolute; left: 0; top: -8%; height: 116%; }
+.frame[data-parallax] img { position: absolute; left: 0; top: -8%; height: 116%; will-change: transform; }
 .frame-main { width: 78%; aspect-ratio: 4 / 5.2; }
 .frame-side { position: absolute; right: 0; bottom: 0; width: 44%; aspect-ratio: 3 / 4; border: 6px solid var(--wine); }
 .about-copy p { max-width: 34em; margin-top: var(--space-5); color: var(--muted); }
@@ -106,7 +106,7 @@ section { position: relative; }
   .gallery .headline { font-size: clamp(2.2rem, min(4.4vw, 7vh), 3.8rem); }
   .gallery-hint { display: block; }
   .gallery-rail { overflow: visible; scroll-snap-type: none; padding: 0; }
-  .gallery-track { gap: var(--space-6); padding: 0 var(--gutter); }
+  .gallery-track { gap: var(--space-6); padding: 0 var(--gutter); will-change: transform; }
   .gallery-item { width: clamp(200px, min(21vw, 34vh), 340px); max-width: none; }
   .gallery-item:nth-child(even) { margin-top: var(--space-7); }
   .gallery-progress { display: block; position: absolute; left: var(--gutter); right: var(--gutter); bottom: var(--space-6); height: 1px; background: var(--line); }
