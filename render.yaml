@@ -1,10 +1,10 @@
-# Render Blueprint: a backend (Node, nulla függőség). A JSON-tár ingyenes csomagon újraindításkor törlődik – demóra jó.
+# Render Blueprint: a backend (Node). Az adatok a Neon Postgresben vannak (DATABASE_URL); enélkül JSON-fájl, ami ingyenes csomagon újraindításkor törlődik.
 services:
   - type: web
     name: nailsbyevelin-api
     runtime: node
     plan: free
-    buildCommand: echo "nincs build"
+    buildCommand: npm ci --prefix backend --omit=dev
     startCommand: node backend/src/server.js
     healthCheckPath: /health
     envVars:
@@ -14,3 +14,4 @@ services:
       - { key: CORS_ORIGIN, value: 'https://orbkodolas.github.io' }
       - { key: API_URL, sync: false }          # a service saját https://….onrender.com címe
       - { key: FORMSUBMIT_EMAIL, sync: false }
+      - { key: DATABASE_URL, sync: false }     # Neon kapcsolódási cím (pooler), titkos

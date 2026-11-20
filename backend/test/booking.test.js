@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
 import { createApp } from '../src/app.js'
+import { createPgStore } from '../src/store-pg.js'
 import { slotsForDate, zonedToUtc } from '../src/time.js'
 
 // Hétfő 2026-11-23, 09:00 helyi idő; a foglalások a következő napokra szólnak
@@ -14,13 +15,17 @@ const START = '2026-11-23T08:00:00.000Z'
 async function withApi(options, run) {
   const dir = await mkdtemp(join(tmpdir(), 'nails-api-'))
   const clock = { current: new Date(START) }
-  const app = createApp({ dataFile: join(dir, 'db.json'), adminToken: 'test-secret', now: () => clock.current, log: { info() {}, error() {} }, ...options })
+  // TEST_DATABASE_URL esetén ugyanezek a tesztek Postgresen futnak, tesztenként külön, utána törölt táblában
+  const pgStore = process.env.TEST_DATABASE_URL ? createPgStore(process.env.TEST_DATABASE_URL, { table: `nbe_test_${process.pid}_${Math.random().toString(36).slice(2, 8)}` }) : null
+  const app = createApp({ dataFile: join(dir, 'db.json'), ...(pgStore ? { store: pgStore } : {}), adminToken: 'test-secret', now: () => clock.current, log: { info() {}, error() {} }, ...options })
   const server = createServer(app)
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${server.address().port}`
   const call = (method, path, body, headers = {}) => fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) })
   try { await run({ base, call, clock, app }) } finally {
     await new Promise((resolve) => server.close(resolve))
+    await app.idle()
+    if (pgStore) { await pgStore.drop(); await pgStore.close() }
     await rm(dir, { recursive: true, force: true })
   }
 }

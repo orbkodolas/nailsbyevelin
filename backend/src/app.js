@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { createStore } from './store.js'
+import { createPgStore } from './store-pg.js'
 import { catalog, findService, services, publicRules } from './catalog.js'
 import { loadConfig } from './config.js'
 import { createPayments } from './payments.js'
@@ -70,7 +71,8 @@ export function createApp(options = {}) {
     ...(options.formSubmitEmail ? { formSubmitEmail: options.formSubmitEmail } : {}),
     ...options.config,
   })
-  const store = createStore(dataFile)
+  // Adatbázis: DATABASE_URL (Neon/Postgres) esetén Postgres, különben a helyi JSON-fájl (fejlesztés, tesztek)
+  const store = options.store ?? (options.databaseUrl ? createPgStore(options.databaseUrl, { log }) : createStore(dataFile))
   const payments = createPayments({ config, fetchImpl, now })
   const notifier = createNotifier({ config, fetchImpl, log })
   const pending = new Set()
@@ -554,6 +556,7 @@ export function createApp(options = {}) {
   app.tick = tick
   app.idle = () => Promise.all([...pending])
   app.config = config
+  app.store = store
   return app
 }
 

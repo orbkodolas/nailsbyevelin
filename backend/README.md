@@ -1,6 +1,6 @@
 # Nails by Evelin – foglalási API
 
-Node.js (20.6+), külső csomag nélkül, JSON fájl alapú tárolással. Indítás: `npm start`, tesztek: `npm test`.
+Node.js (20.6+), egyetlen függőség: `pg`. Tárolás: `DATABASE_URL` megadásakor Neon Postgres (`nbe_records` tábla: collection, id, data jsonb), enélkül helyi JSON-fájl (`data/bookings.json`). Indítás: `npm start`, tesztek: `npm test` (JSON-fájlon), `TEST_DATABASE_URL=… npm test` (Postgresen, ideiglenes táblákban).
 Beállítások: `backend/.env` (példa: `.env.example`, a Git kihagyja). Az árak és a házirend a `../shared/catalog.json`-ban vannak; a frontend ugyanezt olvassa.
 
 ## Mit old meg?
@@ -46,4 +46,4 @@ A Stripe és Barion a dokumentáció alapján, mock-kal tesztelve van bekötve; 
 
 ## Határok
 
-Nincs naptárszinkron és SMS. Az admin egy megosztott tokent használ. A JSON fájl tároló egy példányos futtatásra való; nagyobb forgalomnál adatbázisra cserélendő. Éles használat előtt HTTPS és rendszeres mentés kell.
+Nincs naptárszinkron és SMS. Az admin egy megosztott tokent használ. Éles üzemben a Neon Postgres a tár (a Neon automatikusan ment, időpontra visszaállítható); a JSON-fájl csak fejlesztésre való.
