@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { getLenis, reducedMotion } from '../lib/motion'
 
 const links = [
@@ -47,7 +47,8 @@ export function Header() {
   // Kör-maszk animáció (WAAPI): nyitás a burger közepéből, zárás vissza oda (a nyitás tükre).
   // A CSS végállapotok (zárt: 0 sugár, nyitott: teljes fedés) vizuálisan azonosak az animációk végpontjaival,
   // így a befejezéskor nincs ugrás; megszakításkor az aktuális (animált) értékről folytatjuk.
-  useEffect(() => {
+  // Layout effect: az animáció még az első festés előtt indul, így nincs egy képkockás villanás a CSS végállapottal
+  useLayoutEffect(() => {
     const menu = menuRef.current
     const burger = burgerRef.current
     if (!menu || !burger) return
@@ -66,7 +67,8 @@ export function Header() {
     // Pontosan a legtávolabbi sarokig érő sugár: így a zárás első képkockájától látszik a zsugorodás
     const full = `circle(${Math.ceil(Math.hypot(Math.max(x, m.width - x), Math.max(y, m.height - y))) + 2}px ${at})`
     // Nyitás és zárás ugyanaz a mozgás időben megfordítva: azonos idő, szimmetrikus görbe, mindkettő a burger közepéhez kötve
-    const closed = `circle(0px ${at})`
+    // A kör a gomb méretéről indul / oda ér vissza: nincs láthatatlan, lassú szakasz a gomb mögött
+    const closed = `circle(${b.width / 2}px ${at})`
     const keyframes: Keyframe[] = open
       ? [{ clipPath: current || closed }, { clipPath: full }]
       : [{ clipPath: current || full, visibility: 'visible' }, { clipPath: closed, visibility: 'visible' }]
