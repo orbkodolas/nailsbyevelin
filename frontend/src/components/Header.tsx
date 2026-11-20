@@ -58,17 +58,21 @@ export function Header() {
     let options: KeyframeAnimationOptions
     const m = menu.getBoundingClientRect()
     const b = burger.getBoundingClientRect()
-    const at = `at ${b.left + b.width / 2 - m.left}px ${b.top + b.height / 2 - m.top}px`
+    const x = b.left + b.width / 2 - m.left
+    const y = b.top + b.height / 2 - m.top
+    const at = `at ${x}px ${y}px`
+    // Pontosan a legtávolabbi sarokig érő sugár: így a zárás első képkockájától látszik a zsugorodás
+    const full = `circle(${Math.ceil(Math.hypot(Math.max(x, m.width - x), Math.max(y, m.height - y))) + 2}px ${at})`
     if (open) {
-      keyframes = [{ clipPath: current || `circle(0px ${at})` }, { clipPath: `circle(150% ${at})` }]
+      keyframes = [{ clipPath: current || `circle(0px ${at})` }, { clipPath: full }]
       options = { duration: 450, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
     } else {
-      // A nyitás tükre: vissza a burger közepébe, ugyanannyi idő alatt, fordított görbével
+      // Vissza a burger közepébe; gyors, azonnal induló görbe, hogy az X→hamburger váltással együtt érjen véget
       keyframes = [
-        { clipPath: current || `circle(150% ${at})`, visibility: 'visible' },
+        { clipPath: current || full, visibility: 'visible' },
         { clipPath: `circle(0px ${at})`, visibility: 'visible' },
       ]
-      options = { duration: 450, easing: 'cubic-bezier(0.7, 0, 0.84, 0)' }
+      options = { duration: 320, easing: 'cubic-bezier(0.33, 0, 0.2, 1)' }
     }
     const anim = menu.animate(keyframes, options)
     anim.onfinish = () => { if (clipAnim.current === anim) clipAnim.current = null }
