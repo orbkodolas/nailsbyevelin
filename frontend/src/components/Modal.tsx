@@ -50,6 +50,7 @@ export function Modal({ open, onClose, title, children, wide }: { open: boolean;
 
   return createPortal(
     <div
+      data-lenis-prevent
       className={`modal${open && visible ? ' is-open' : ''}${wide ? ' is-wide' : ''}`}
       onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}
     >
