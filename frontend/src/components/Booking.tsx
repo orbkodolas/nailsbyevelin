@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { catalog, durationLabel, forint } from '../lib/catalog'
 import { ApiError, createBooking, getAvailability, getBooking, getSettings, type Availability, type CreatedBooking, type PaymentMethod } from '../lib/api'
-import { MONTHS, WEEKDAYS, addDays, formatLongDate, formatWhen, monthGrid, todayString } from '../lib/dates'
+import { MONTHS, WEEKDAYS, addDays, formatDateTime, formatLongDate, formatWhen, monthGrid, todayString } from '../lib/dates'
 import { gsap, reducedMotion } from '../lib/motion'
 import { openBooking } from '../lib/bookingModal'
 import { Headline } from './Headline'
@@ -122,6 +122,8 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
       {created ? (
         created.payment?.provider === 'demo' && payOpen ? (
           <DemoPayment payment={created.payment} onPaid={onDemoPaid} onCancel={() => setPayOpen(false)} />
+        ) : created.status === 'booked' ? (
+          <Confirmed booking={created} />
         ) : (
           <Done booking={created} emailEnabled={emailEnabled} onPay={() => setPayOpen(true)} />
         )
@@ -209,6 +211,20 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
           </aside>
         </form>
       )}
+    </div>
+  )
+}
+
+function Confirmed({ booking }: { booking: CreatedBooking }) {
+  const { date, time } = formatDateTime(booking.startsAt)
+  return (
+    <div className="done done-confirmed">
+      <p className="eyebrow" data-done><span className="eyebrow-line" />Rögzítettem</p>
+      <h3 data-done>Időpontod rögzítve lett!</h3>
+      <p className="done-when" data-done>{booking.serviceName} • {forint(booking.priceHuf)}</p>
+      <p data-done>Köszönöm a bizalmad!<br />Szeretettel várlak ekkor: <b>{date} {time}</b></p>
+      <p data-done>Kérlek, ne hozz magaddal senkit, hacsak nem egymás után van időpontotok. Kérlek, ne késs — legfeljebb 15 perces késést tudok tolerálni, azon felül sajnos már nem foglak tudni fogadni.</p>
+      <p className="done-small" data-done>Ha le szeretnéd mondani az időpontod, azt megteheted az e-mail címedre küldött levélben, az „Időpont lemondása” gombra kattintva.</p>
     </div>
   )
 }

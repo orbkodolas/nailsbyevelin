@@ -1,3 +1,4 @@
+import { Platform } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
 
 export const API_URL = 'https://nailsbyevelin-api.onrender.com'
@@ -20,17 +21,22 @@ export type Voucher = {
 
 let token: string | null = null
 
+// Weben a SecureStore nem elérhető, ott localStorage a tartalék.
+const isWeb = Platform.OS === 'web'
+
 export async function loadToken() {
-  token = await SecureStore.getItemAsync(TOKEN_KEY)
+  token = isWeb ? localStorage.getItem(TOKEN_KEY) : await SecureStore.getItemAsync(TOKEN_KEY)
   return token
 }
 export async function saveToken(value: string) {
   token = value
-  await SecureStore.setItemAsync(TOKEN_KEY, value)
+  if (isWeb) localStorage.setItem(TOKEN_KEY, value)
+  else await SecureStore.setItemAsync(TOKEN_KEY, value)
 }
 export async function clearToken() {
   token = null
-  await SecureStore.deleteItemAsync(TOKEN_KEY)
+  if (isWeb) localStorage.removeItem(TOKEN_KEY)
+  else await SecureStore.deleteItemAsync(TOKEN_KEY)
 }
 
 export class ApiError extends Error {
