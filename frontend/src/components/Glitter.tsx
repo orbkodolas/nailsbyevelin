@@ -12,6 +12,7 @@ export function Glitter({ count = 40, className = '' }: { count?: number; classN
     const canvas = ref.current
     const context = canvas?.getContext('2d')
     if (!canvas || !context) return
+    const ctx: CanvasRenderingContext2D = context
     const parent = canvas.parentElement as HTMLElement
     const small = window.matchMedia('(max-width: 700px)').matches
     const total = small ? Math.round(count * 0.55) : count
@@ -27,24 +28,24 @@ export function Glitter({ count = 40, className = '' }: { count?: number; classN
     const resize = () => {
       width = parent.clientWidth; height = parent.clientHeight
       canvas.width = width * ratio; canvas.height = height * ratio
-      context.setTransform(ratio, 0, 0, ratio, 0, 0)
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
       seed(); draw(0)
     }
     const star = (x: number, y: number, r: number) => {
-      context.beginPath()
-      context.moveTo(x, y - r)
-      context.quadraticCurveTo(x, y, x + r, y)
-      context.quadraticCurveTo(x, y, x, y + r)
-      context.quadraticCurveTo(x, y, x - r, y)
-      context.quadraticCurveTo(x, y, x, y - r)
-      context.fill()
+      ctx.beginPath()
+      ctx.moveTo(x, y - r)
+      ctx.quadraticCurveTo(x, y, x + r, y)
+      ctx.quadraticCurveTo(x, y, x, y + r)
+      ctx.quadraticCurveTo(x, y, x - r, y)
+      ctx.quadraticCurveTo(x, y, x, y - r)
+      ctx.fill()
     }
     function draw(time: number) {
-      context.clearRect(0, 0, width, height)
+      ctx.clearRect(0, 0, width, height)
       for (const s of stars) {
         const alpha = reducedMotion() ? 0.5 : Math.max(0, Math.sin(time * s.speed + s.phase)) ** 2
         if (alpha < 0.02) continue
-        context.fillStyle = `rgba(${TONES[s.tone]},${alpha * 0.9})`
+        ctx.fillStyle = `rgba(${TONES[s.tone]},${alpha * 0.9})`
         star(s.x, s.y, s.r * (0.6 + alpha * 0.6))
       }
     }
