@@ -21,6 +21,7 @@ export function Voucher() {
   const [payOpen, setPayOpen] = useState(false)
   const [thanks, setThanks] = useState(false)
   const card = useRef<HTMLDivElement>(null)
+  const [openedAt] = useState(() => Date.now())
 
   useEffect(() => { getSettings().then((s) => { setMethods(s.paymentMethods); setMethod(s.paymentMethods[0]?.id ?? '') }).catch(() => {}) }, [])
 
@@ -43,7 +44,7 @@ export function Voucher() {
     try {
       const result = await createVoucher({
         amountHuf: value, buyerName: form.get('buyerName'), buyerEmail: form.get('buyerEmail'), recipientName: form.get('recipientName'),
-        message: form.get('message'), website: form.get('website'), paymentMethod: method || undefined,
+        message: form.get('message'), website: form.get('website'), formMs: Date.now() - openedAt, paymentMethod: method || undefined,
       })
       if (result.payment.provider === 'demo') {
         setDemoPayment(result.payment)

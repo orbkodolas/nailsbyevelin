@@ -48,6 +48,8 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
   const [created, setCreated] = useState<CreatedBooking | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const panel = useRef<HTMLDivElement>(null)
+  // Bot-csapda: a szerver a megnyitás és a küldés közti időt is nézi (ember ennyi idő alatt nem tölt ki űrlapot)
+  const [openedAt] = useState(() => Date.now())
 
   const category = catalog.categories.find((item) => item.id === categoryId) ?? catalog.categories[0]
   const service = category.items.find((item) => item.id === serviceId)
@@ -92,7 +94,7 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
     try {
       const result = await createBooking({
         serviceId: service.id, date, time, name: form.get('name'), phone: form.get('phone'), email: form.get('email'),
-        note: form.get('note'), website: form.get('website'), acceptedRules: form.get('acceptedRules') === 'on', paymentMethod: paymentMethod || undefined,
+        note: form.get('note'), website: form.get('website'), formMs: Date.now() - openedAt, acceptedRules: form.get('acceptedRules') === 'on', paymentMethod: paymentMethod || undefined,
       })
       setCreated(result)
       // A modál görgetőjének tetejére: a "kész" nézet látszódjon

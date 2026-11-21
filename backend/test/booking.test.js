@@ -17,7 +17,7 @@ async function withApi(options, run) {
   const clock = { current: new Date(START) }
   // TEST_DATABASE_URL esetén ugyanezek a tesztek Postgresen futnak, tesztenként külön, utána törölt táblában
   const pgStore = process.env.TEST_DATABASE_URL ? createPgStore(process.env.TEST_DATABASE_URL, { table: `nbe_test_${process.pid}_${Math.random().toString(36).slice(2, 8)}` }) : null
-  const app = createApp({ dataFile: join(dir, 'db.json'), ...(pgStore ? { store: pgStore } : {}), adminToken: 'test-secret', now: () => clock.current, log: { info() {}, error() {} }, ...options })
+  const app = createApp({ dataFile: join(dir, 'db.json'), ...(pgStore ? { store: pgStore } : {}), adminToken: 'test-secret', now: () => clock.current, log: { info() {}, error() {} }, ...options, config: { minFormMs: 0, createPerHour: 1000, createPerDay: 1000, ...options.config } })
   const server = createServer(app)
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${server.address().port}`

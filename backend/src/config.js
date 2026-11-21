@@ -14,6 +14,14 @@ const num = (value, fallback) => (value !== undefined && value !== '' && Number.
 export function loadConfig(env = process.env, overrides = {}) {
   const config = {
     adminToken: env.ADMIN_TOKEN || 'dev-admin-token',
+    // Ha meg van adva, a szerver csak ezt a SHA-256 hash-t ismeri (hex), a nyers kulcsot nem
+    adminTokenSha256: /^[0-9a-f]{64}$/i.test(env.ADMIN_TOKEN_SHA256 || '') ? env.ADMIN_TOKEN_SHA256.toLowerCase() : '',
+    // Védelem: IP-nkénti létrehozási keret, fizetetlen foglalások felső korlátja, űrlap-időcsapda, admin kizárás
+    createPerHour: num(env.CREATE_PER_HOUR, 8),
+    createPerDay: num(env.CREATE_PER_DAY, 20),
+    maxPendingHolds: num(env.MAX_PENDING_HOLDS, 20),
+    minFormMs: num(env.MIN_FORM_MS, 2500),
+    adminMaxFailures: num(env.ADMIN_MAX_FAILURES, 10),
     timezone: env.TIMEZONE || 'Europe/Budapest',
     publicUrl: (env.PUBLIC_URL || 'http://localhost:5173').replace(/\/$/, ''),
     apiUrl: (env.API_URL || `http://localhost:${env.PORT || 3001}`).replace(/\/$/, ''),

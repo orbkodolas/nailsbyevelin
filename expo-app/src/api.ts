@@ -22,11 +22,19 @@ export type Voucher = {
 
 let token: string | null = null
 
+/**
+ * Az APK-ba épített eszközkulcs (GitHub secret → EXPO_PUBLIC_ADMIN_KEY a buildnél; a forráskódban nincs).
+ * Az APK maga a kulcs: telepítés/újratelepítés után nem kell párosítani, a telefon zárja (LockGate) védi.
+ * Ha kiszivárog: a szerveren az Eszközök fülön letiltható, és új kulccsal új APK készül.
+ */
+export const BUILT_IN_KEY = process.env.EXPO_PUBLIC_ADMIN_KEY || ''
+export const usingBuiltInKey = () => Boolean(BUILT_IN_KEY) && token === BUILT_IN_KEY
+
 // Weben a SecureStore nem elérhető, ott localStorage a tartalék.
 const isWeb = Platform.OS === 'web'
 
 export async function loadToken() {
-  token = isWeb ? localStorage.getItem(TOKEN_KEY) : await SecureStore.getItemAsync(TOKEN_KEY)
+  token = (isWeb ? localStorage.getItem(TOKEN_KEY) : await SecureStore.getItemAsync(TOKEN_KEY)) || BUILT_IN_KEY || null
   return token
 }
 export async function saveToken(value: string) {
@@ -53,6 +61,9 @@ const messages: Record<string, string> = {
   block_has_bookings: 'Erre a napra közben foglalás érkezett.',
   refund_not_pending: 'Ennél nincs függő visszautalás.',
   not_found: 'Nem található (lehet, hogy közben törölték).',
+  invalid_pairing_code: 'Hibás, lejárt vagy már felhasznált párosító kód.',
+  too_many_devices: 'Elérted az eszközök számának korlátját (10). Tilts le egy régit.',
+  too_many_requests: 'Túl sok sikertelen próbálkozás. Várj 15 percet, és próbáld újra.',
   network: 'Nincs kapcsolat a szerverrel. Próbáld újra.',
 }
 export const errorText = (error: unknown) =>
@@ -88,3 +99,24 @@ export const getClosedDays = () =>
 export const getVouchers = () => api<{ vouchers: Voucher[] }>('/api/admin/vouchers')
 export const voucherAction = (id: string, action: 'payment-confirmed' | 'redeem') =>
   api<Voucher>(`/api/admin/vouchers/${id}/${action}`, { method: 'POST', body: {} })
+
+// ---------- admin eszközök ----------
+// Minden telefon/gép saját kulcsot kap egy egyszer használatos párosító kóddal; a mesterkulcs nem kerül az eszközre.
+export type Device = { id: string; name: string; createdAt: string; lastSeenAt?: string; pairedBy?: string; current: boolean }
+export const deviceName = () =>
+  Platform.OS === 'android' ? String((Platform.constants as { Model?: string })?.Model ?? 'Android telefon')
+    : Platform.OS === 'ios' ? 'iPhone / iPad' : 'Böngésző'
+export const createPairingCode = (authToken?: string) =>
+  api<{ code: string; expiresAt: string }>('/api/admin/devices/pairing', { method: 'POST', body: {}, authToken })
+export async function pairDevice(code: string) {
+  const result = await api<{ token: string; deviceId: string; name: string }>('/api/devices/pair', { method: 'POST', body: { code, name: deviceName() } })
+  await saveToken(result.token)
+  return result
+}
+export const getDevices = () => api<{ devices: Device[] }>('/api/admin/devices')
+export const revokeDevice = (id: string) => api<{ ok: true }>(`/api/admin/devices/${id}`, { method: 'DELETE' })
+/** Régebbi verzióból a mesterkulcs lehet eltárolva: ilyenkor csendben saját eszközkulcsra cseréljük. */
+export async function upgradeToDeviceToken() {
+  const me = await api<{ kind: 'master' | 'device' }>('/api/admin/whoami')
+  if (me.kind === 'master') await pairDevice((await createPairingCode()).code)
+}

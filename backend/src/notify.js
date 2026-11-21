@@ -9,7 +9,8 @@ export function formatDateTime(iso, timeZone) {
 export function createNotifier({ config, fetchImpl, log = console }) {
   async function sendMail({ to, subject, text }) {
     if (!config.resendApiKey || !config.mailFrom || !to) {
-      log.info?.(`[levél – nincs küldő beállítva] ${to || '(nincs cím)'} | ${subject}`)
+      // Személyes adat (e-mail cím) nem kerül a naplóba, csak a domain
+      log.info?.(`[levél – nincs küldő beállítva] ${to ? `***@${String(to).split('@')[1] ?? '?'}` : '(nincs cím)'} | ${subject.replace(/–.*$/, '–…')}`)
       return 'not_configured'
     }
     try {

@@ -11,6 +11,11 @@ import '@fontsource/pinyon-script/400.css'
 import './index.css'
 import App from './App.tsx'
 
+// Keretvédelem (clickjacking ellen): ha egy idegen oldal iframe-be töltené, kitörünk belőle
+if (window.top !== window.self) {
+  try { window.top!.location.href = window.location.href } catch { document.documentElement.style.display = 'none' }
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

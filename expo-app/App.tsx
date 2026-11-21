@@ -9,8 +9,9 @@ import { Jost_500Medium } from '@expo-google-fonts/jost/500Medium'
 import { Jost_600SemiBold } from '@expo-google-fonts/jost/600SemiBold'
 import { CormorantGaramond_500Medium } from '@expo-google-fonts/cormorant-garamond/500Medium'
 import { CormorantGaramond_500Medium_Italic } from '@expo-google-fonts/cormorant-garamond/500Medium_Italic'
-import { CalendarDays, ChartSpline, Gift, LogOut } from 'lucide-react-native'
-import { clearToken, loadToken } from './src/api'
+import { CalendarDays, ChartSpline, Gift, LogOut, ShieldCheck } from 'lucide-react-native'
+import { clearToken, loadToken, revokeDevice, upgradeToDeviceToken, usingBuiltInKey } from './src/api'
+import { Devices } from './src/screens/Devices'
 import { clearCache } from './src/useLoad'
 import { Dashboard } from './src/screens/Dashboard'
 import { Login } from './src/screens/Login'
@@ -18,11 +19,13 @@ import { Vouchers } from './src/screens/Vouchers'
 import { Revenue } from './src/screens/Revenue'
 import { c, dayKey, f, fmtDayLong, s } from './src/theme'
 import { DialogLayer, IconButton, confirm, useLayout } from './src/ui'
+import { LockGate } from './src/components/LockGate'
 
 const tabs = [
   { key: 'calendar', label: 'Naptár', icon: CalendarDays, Screen: Dashboard },
   { key: 'revenue', label: 'Bevétel', icon: ChartSpline, Screen: Revenue },
   { key: 'vouchers', label: 'Utalványok', icon: Gift, Screen: Vouchers },
+  { key: 'devices', label: 'Eszközök', icon: ShieldCheck, Screen: Devices },
 ] as const
 
 function greeting() {
@@ -33,24 +36,37 @@ function greeting() {
 export default function App() {
   const [fontsLoaded] = useFonts({ Jost_400Regular, Jost_500Medium, Jost_600SemiBold, CormorantGaramond_500Medium, CormorantGaramond_500Medium_Italic })
   const [auth, setAuth] = useState<'loading' | 'in' | 'out'>('loading')
+  // Kulccsal épp most belépve nem kérünk azonnal ujjlenyomatot is
+  const [freshLogin, setFreshLogin] = useState(false)
   const [tab, setTab] = useState<(typeof tabs)[number]['key']>('calendar')
   // A már megnyitott fülek életben maradnak (elrejtve): váltáskor nincs újratöltés és újraszámolás
   const [visited, setVisited] = useState<string[]>(['calendar'])
   useEffect(() => { setVisited((v) => (v.includes(tab) ? v : [...v, tab])) }, [tab])
 
-  useEffect(() => { loadToken().then((t) => setAuth(t ? 'in' : 'out')) }, [])
+  useEffect(() => {
+    loadToken().then((t) => {
+      setAuth(t ? 'in' : 'out')
+      // Régi verzióból maradt mesterkulcs → csendben saját eszközkulcsra cseréljük
+      if (t) upgradeToDeviceToken().catch(() => {})
+    })
+  }, [])
   const logout = useCallback(() => { clearCache(); setVisited(['calendar']); clearToken().finally(() => setAuth('out')) }, [])
 
   const current = tabs.find((t) => t.key === tab)!
   const { desktop, gutter } = useLayout()
-  const askLogout = async () => { if (await confirm('Kilépés', 'Újra meg kell majd adni a belépési kulcsot.', 'Kilépés')) logout() }
+  // Kilépéskor az eszköz kulcsát a szerveren is letiltjuk (így egy ellopott kulcs sem használható tovább)
+  const askLogout = async () => {
+    if (!(await confirm('Kilépés', 'Ez az eszköz kilép, a kulcsa letiltásra kerül. Újra belépni párosító kóddal lehet.', 'Kilépés'))) return
+    await revokeDevice('current').catch(() => {})
+    logout()
+  }
   const header = (
     <View style={[s.row, { justifyContent: 'space-between', flexWrap: 'nowrap', paddingHorizontal: gutter, paddingTop: desktop ? 28 : 10, paddingBottom: 6, width: '100%', maxWidth: 1240, alignSelf: 'center' }]}>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={s.eyebrow}>{tab === 'calendar' ? fmtDayLong(dayKey(new Date())) : 'Nails by Evelin'}</Text>
         <Text style={[s.h1, desktop && { fontSize: 40, lineHeight: 46 }]}>{tab === 'calendar' ? <>{greeting()}, <Text style={{ fontFamily: f.serifItalic, color: c.rose }}>Evelin</Text></> : current.label}</Text>
       </View>
-      {!desktop && <IconButton icon={LogOut} label="Kilépés" color={c.muted} onPress={askLogout} />}
+      {!desktop && !usingBuiltInKey() && <IconButton icon={LogOut} label="Kilépés" color={c.muted} onPress={askLogout} />}
     </View>
   )
   const screen = (
@@ -67,8 +83,8 @@ export default function App() {
       <StatusBar style="light" />
       <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
         {(auth === 'loading' || !fontsLoaded) && <ActivityIndicator color={c.rose} style={{ flex: 1 }} />}
-        {fontsLoaded && auth === 'out' && <Login onDone={() => setAuth('in')} />}
-        {fontsLoaded && auth === 'in' && (desktop ? (
+        {fontsLoaded && auth === 'out' && <Login onDone={() => { setFreshLogin(true); setAuth('in') }} />}
+        {fontsLoaded && auth === 'in' && <LockGate startOpen={freshLogin}>{desktop ? (
           // Asztali nézet: oldalsáv a navigációval, mellette a tartalom
           <View style={{ flex: 1, flexDirection: 'row' }}>
             <View style={{ width: 240, borderRightWidth: 1, borderRightColor: c.line, backgroundColor: c.card, paddingHorizontal: 16, paddingVertical: 28, gap: 6 }}>
@@ -87,10 +103,10 @@ export default function App() {
                 )
               })}
               <View style={{ flex: 1 }} />
-              <Pressable onPress={askLogout} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 12 }, pressed && { backgroundColor: c.raised }]}>
+              {!usingBuiltInKey() && <Pressable onPress={askLogout} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 12 }, pressed && { backgroundColor: c.raised }]}>
                 <LogOut size={18} color={c.muted} strokeWidth={1.6} />
                 <Text style={{ color: c.muted, fontSize: 15, fontFamily: f.sans }}>Kilépés</Text>
-              </Pressable>
+              </Pressable>}
             </View>
             <View style={{ flex: 1 }}>
               {header}
@@ -115,7 +131,7 @@ export default function App() {
               })}
             </View>
           </>
-        ))}
+        )}</LockGate>}
       </SafeAreaView>
       <DialogLayer handleBack />
     </SafeAreaProvider>

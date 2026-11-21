@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { createStore } from './store.js'
@@ -6,8 +6,9 @@ import { createPgStore } from './store-pg.js'
 import { catalog, findService, services, publicRules } from './catalog.js'
 import { loadConfig } from './config.js'
 import { createPayments } from './payments.js'
-import { createNotifier } from './notify.js'
+import { createNotifier, formatDateTime } from './notify.js'
 import { addDays, isDateString, localDate, localTime, overlaps, slotsForDate, zonedToUtc } from './time.js'
+import { adminTokenMatches, cleanText, clientIp, createLimiter, HTML_CSP, isSafeName, sameSecret, setSecurityHeaders } from './security.js'
 
 const HOUR = 60 * 60 * 1000
 const DAY = 24 * HOUR
@@ -24,7 +25,7 @@ const json = (res, status, value, headers = {}) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...headers })
   res.end(body)
 }
-const html = (res, status, body) => { res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }); res.end(body) }
+const html = (res, status, body) => { res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': HTML_CSP }); res.end(body) }
 const esc = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])
 function demoPage({ payment, back = '', error = '', message = '' }) {
   const amount = payment ? `${new Intl.NumberFormat('hu-HU').format(payment.amountHuf)} Ft` : ''
@@ -51,11 +52,8 @@ const normalizePhone = (value) => {
   if (compact.startsWith('36')) return `+${compact}`
   return compact
 }
-const sameToken = (a, b) => {
-  const left = Buffer.from(String(a || '')); const right = Buffer.from(String(b || ''))
-  return left.length === right.length && timingSafeEqual(left, right)
-}
-const isEmail = (value) => typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+const sameToken = sameSecret
+const isEmail = (value) => typeof value === 'string' && value.length <= 254 && /^[^\s@<>"'`]+@[^\s@<>"'`]+\.[^\s@<>"'`]+$/.test(value)
 const roundTo100 = (value) => Math.round(value / 100) * 100
 
 async function readRaw(req) {
@@ -84,17 +82,85 @@ export function createApp(options = {}) {
   const notifier = createNotifier({ config, fetchImpl, log })
   const pending = new Set()
   const background = (promise) => { const tracked = promise.catch(() => {}).finally(() => pending.delete(tracked)); pending.add(tracked) }
-  const hits = new Map()
 
-  // ---------- közös segédek ----------
+  // ---------- védelem (OWASP API4/API6, OAT-021, NIST SP 800-63B-4) ----------
+  // Foglalás/utalvány létrehozása IP-nként óránként és naponta korlátozva
+  const createHourly = createLimiter({ windowMs: HOUR, max: config.createPerHour })
+  const createDaily = createLimiter({ windowMs: DAY, max: config.createPerDay })
+  // Sikertelen admin belépés: 10 hibás próbálkozás / 15 perc / IP, utána kizárás az ablak végéig
+  const adminFailures = createLimiter({ windowMs: 15 * 60_000, max: config.adminMaxFailures })
+  // Hibás vendég-kezelőkód (foglalás-azonosító + token találgatása)
+  const tokenFailures = createLimiter({ windowMs: 15 * 60_000, max: 30 })
+  const ipOf = (req) => clientIp(req, config.trustProxy).ip
   const rateLimited = (req) => {
-    const forwarded = config.trustProxy ? String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() : ''
-    const key = forwarded || req.socket.remoteAddress || 'unknown'
-    const recent = (hits.get(key) || []).filter((time) => time > Date.now() - HOUR)
-    recent.push(Date.now())
-    hits.set(key, recent)
-    return recent.length > 12
+    const ip = ipOf(req)
+    const hourly = createHourly.hit(ip)
+    const daily = createDaily.hit(ip)
+    return hourly || daily
   }
+  // Emberi kitöltés: az űrlap megnyitása és elküldése között legalább minFormMs telt el (bot-csapda a honeypot mellett)
+  const looksAutomated = (body) => {
+    if (body.website) return true
+    if (config.minFormMs > 0 && !(Number.isFinite(body.formMs) && body.formMs >= config.minFormMs)) return true
+    return false
+  }
+  // A kiszolgáló a saját PUBLIC_URL-jére irányíthat vissza; más (akár ugyanazon a GitHub-fiókon lévő) oldalra nem
+  const publicBase = new URL(config.publicUrl)
+  const isOwnUrl = (value) => {
+    try {
+      const target = new URL(value)
+      const base = publicBase.pathname.replace(/\/$/, '')
+      return target.origin === publicBase.origin && (target.pathname === base || target.pathname.startsWith(`${base}/`) || (!base && target.pathname.startsWith('/')))
+    } catch { return false }
+  }
+  // ---------- admin eszközök ----------
+  // Minden admin eszköz saját, véletlen kulcsot kap (256 bit); a szerver csak a SHA-256 lenyomatát tárolja.
+  // Új eszköz egyszer használatos, 10 percig érvényes párosító kóddal léphet be; az eszközök egyenként letilthatók.
+  const hashHex = (value) => createHash('sha256').update(String(value)).digest('hex')
+  const normalizeCode = (value) => String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const PAIRING_MS = 10 * 60_000
+  const MAX_DEVICES = 10
+  let deviceCache = null
+  const activeDevices = async () => {
+    if (deviceCache && Date.now() - deviceCache.at < 30_000) return deviceCache.list
+    const list = await store.read((state) => (state.devices ?? []).filter((item) => !item.revokedAt))
+    deviceCache = { at: Date.now(), list }
+    return list
+  }
+  const seenWritten = new Map()
+  // Párosító kód találgatása ellen: IP-nként 5 hibás kód / 15 perc, és globálisan 30 hibás kód / óra
+  const pairFailures = createLimiter({ windowMs: 15 * 60_000, max: 5 })
+  const pairFailuresGlobal = createLimiter({ windowMs: HOUR, max: 30 })
+  async function issuePairing(createdBy) {
+    const code = Array.from(randomBytes(8), (byte) => VOUCHER_ALPHABET[byte % VOUCHER_ALPHABET.length]).join('')
+    const expiresAt = new Date(now().getTime() + PAIRING_MS).toISOString()
+    await store.update((state) => {
+      const nowIso = now().toISOString()
+      state.pairings = (state.pairings ?? []).filter((item) => !item.usedAt && item.expiresAt > nowIso).slice(-4) // legfeljebb 5 élő kód
+      state.pairings.push({ id: randomUUID(), codeHash: hashHex(code), expiresAt, createdAt: nowIso, createdBy })
+    })
+    return { code: `${code.slice(0, 4)}-${code.slice(4)}`, expiresAt }
+  }
+
+  async function authenticateAdmin(header) {
+    if (adminLocked) return null
+    if (adminTokenMatches(header, config)) return { kind: 'master' }
+    const match = /^Bearer ([\w-]{32,200})$/.exec(String(header || ''))
+    if (!match) return null
+    const digest = hashHex(match[1])
+    const device = (await activeDevices()).find((item) => sameSecret(item.tokenHash, digest))
+    if (!device) return null
+    // Utolsó használat: óránként legfeljebb egyszer írjuk
+    if (Date.now() - (seenWritten.get(device.id) ?? 0) > HOUR) {
+      seenWritten.set(device.id, Date.now())
+      background(store.update((state) => { const item = (state.devices ?? []).find((d) => d.id === device.id); if (item) item.lastSeenAt = now().toISOString() }))
+    }
+    return { kind: 'device', device }
+  }
+
+  // Fail-closed: éles adatbázissal nem fogadjuk el a fejlesztői alapkulcsot
+  const adminLocked = Boolean(options.databaseUrl) && !config.adminTokenSha256 && config.adminToken === 'dev-admin-token'
+  if (adminLocked) log.error?.('[biztonság] ADMIN_TOKEN nincs beállítva – az admin felület le van zárva.')
 
   const holds = (booking) => booking.status === 'booked' || (booking.status === 'pending_payment' && booking.holdExpiresAt > now().toISOString())
   const busyRanges = (state) => [
@@ -226,6 +292,7 @@ export function createApp(options = {}) {
 
   // ---------- kéréskezelő ----------
   async function app(req, res) {
+    setSecurityHeaders(res)
     res.setHeader('access-control-allow-origin', config.corsOrigin)
     res.setHeader('access-control-allow-methods', 'GET, POST, DELETE, OPTIONS')
     res.setHeader('access-control-allow-headers', 'content-type, authorization, x-manage-token')
@@ -261,10 +328,10 @@ export function createApp(options = {}) {
       if (req.method === 'POST' && path === '/api/bookings') {
         if (rateLimited(req)) return json(res, 429, { error: 'too_many_requests', message: 'Túl sok kérés. Próbáld újra később.' })
         const body = await readBody(req)
-        if (body.website) return json(res, 400, { error: 'invalid_request' }) // honeypot
+        if (looksAutomated(body)) return json(res, 400, { error: 'invalid_request', message: 'Nem sikerült elküldeni. Frissítsd az oldalt, és próbáld újra.' }) // honeypot + időcsapda
         const service = findService(body.serviceId)
         if (!service) return json(res, 400, { error: 'invalid_service', message: 'Válassz érvényes szolgáltatást.' })
-        if (typeof body.name !== 'string' || body.name.trim().length < 2 || body.name.length > 100) return json(res, 400, { error: 'invalid_name', message: 'Add meg a neved.' })
+        if (!isSafeName(body.name)) return json(res, 400, { error: 'invalid_name', message: 'Add meg a neved.' })
         if (typeof body.phone !== 'string' || normalizePhone(body.phone).length < 7 || normalizePhone(body.phone).length > 20) return json(res, 400, { error: 'invalid_phone', message: 'Érvénytelen telefonszám.' })
         if (!isEmail(body.email)) return json(res, 400, { error: 'invalid_email', message: 'Az e-mail cím kell a visszaigazoláshoz és az emlékeztetőhöz.' })
         if (body.acceptedRules !== true) return json(res, 400, { error: 'rules_acceptance_required', message: 'A házirend elfogadása szükséges.' })
@@ -286,6 +353,9 @@ export function createApp(options = {}) {
           const mine = (item) => item.phone === phone || item.email === email
           const active = state.bookings.filter((item) => mine(item) && holds(item) && item.endsAt > now().toISOString())
           if (active.length >= config.maxActiveBookingsPerGuest) return { error: 'too_many_bookings' }
+          // OAT-021: egyszerre legfeljebb ennyi fizetetlen, időpontot fogva tartó foglalás lehet (elárasztás ellen)
+          const unpaidHolds = state.bookings.filter((item) => item.status === 'pending_payment' && item.holdExpiresAt > now().toISOString()).length
+          if (unpaidHolds >= config.maxPendingHolds) return { error: 'holds_exhausted' }
 
           const strikes = state.bookings.filter((item) => mine(item) && item.status === 'no_show')
           const unsettled = strikes.filter((item) => item.noShowReason === 'late' && !item.feeSettled)
@@ -303,7 +373,7 @@ export function createApp(options = {}) {
             amountDueHuf, amountPaidHuf: 0, feeBookingIds: unsettled.map((item) => item.id),
             holdExpiresAt: needsPayment ? holdUntil(providerId) : undefined,
             confirmationStatus: 'awaiting', acceptedRulesAt: now().toISOString(), createdAt: now().toISOString(),
-            customerNote: typeof body.note === 'string' ? body.note.slice(0, 1000) : '',
+            customerNote: cleanText(body.note, 1000),
           }
           state.bookings.push(booking)
           for (const [kind, offset] of [['day_before', DAY], ['two_hours_before', 2 * HOUR]]) {
@@ -312,6 +382,10 @@ export function createApp(options = {}) {
           }
           return { booking, strikes: strikes.length }
         })
+        if (result.error === 'holds_exhausted') {
+          log.error?.('[biztonság] elérte a fizetetlen foglalások felső korlátját – lehetséges elárasztás')
+          return json(res, 503, { error: result.error, message: 'Most túl sok a függőben lévő foglalás. Próbáld újra kicsit később, vagy hívj minket.' })
+        }
         if (result.error === 'too_many_bookings') return json(res, 409, { error: result.error, message: `Egyszerre legfeljebb ${config.maxActiveBookingsPerGuest} aktív foglalásod lehet.` })
         if (result.error) return json(res, 409, { error: result.error, message: 'Ez az időpont már nem szabad. Válassz másikat.' })
 
@@ -337,8 +411,9 @@ export function createApp(options = {}) {
         const [, id, action] = bookingRoute
         const body = req.method === 'POST' ? await readBody(req) : {}
         const token = req.headers['x-manage-token'] || body.token || url.searchParams.get('token')
+        if (tokenFailures.blocked(ipOf(req))) return json(res, 429, { error: 'too_many_requests' }, { 'retry-after': String(tokenFailures.retryAfter(ipOf(req))) })
         const found = await store.read((state) => state.bookings.find((item) => item.id === id))
-        if (!found || !sameToken(token, found.manageToken)) return json(res, 404, { error: 'not_found' })
+        if (!found || !sameToken(token, found.manageToken)) { tokenFailures.hit(ipOf(req)); return json(res, 404, { error: 'not_found' }) }
         if (!action) return json(res, 200, publicBooking(found))
 
         if (action === 'pay') {
@@ -374,10 +449,10 @@ export function createApp(options = {}) {
       if (req.method === 'POST' && path === '/api/vouchers') {
         if (rateLimited(req)) return json(res, 429, { error: 'too_many_requests' })
         const body = await readBody(req)
-        if (body.website) return json(res, 400, { error: 'invalid_request' })
+        if (looksAutomated(body)) return json(res, 400, { error: 'invalid_request', message: 'Nem sikerült elküldeni. Frissítsd az oldalt, és próbáld újra.' })
         const { minHuf, maxHuf } = catalog.voucher
         if (!Number.isInteger(body.amountHuf) || body.amountHuf < minHuf || body.amountHuf > maxHuf || body.amountHuf % 500 !== 0) return json(res, 400, { error: 'invalid_amount', message: `Az érték ${minHuf}–${maxHuf} Ft között, 500 Ft-os lépésekben adható meg.` })
-        if (typeof body.buyerName !== 'string' || body.buyerName.trim().length < 2 || body.buyerName.length > 100) return json(res, 400, { error: 'invalid_name', message: 'Add meg a neved.' })
+        if (!isSafeName(body.buyerName)) return json(res, 400, { error: 'invalid_name', message: 'Add meg a neved.' })
         if (!isEmail(body.buyerEmail)) return json(res, 400, { error: 'invalid_email', message: 'Érvénytelen e-mail cím.' })
         const providerId = payments.get(body.paymentMethod) ? body.paymentMethod : payments.defaultProvider
         const voucher = await store.update((state) => {
@@ -389,8 +464,8 @@ export function createApp(options = {}) {
           const created = {
             id: randomUUID(), code, status: 'pending_payment', amountHuf: body.amountHuf,
             buyerName: body.buyerName.trim(), buyerEmail: body.buyerEmail.trim().toLowerCase(),
-            recipientName: typeof body.recipientName === 'string' ? body.recipientName.trim().slice(0, 100) : '',
-            message: typeof body.message === 'string' ? body.message.slice(0, 300) : '', createdAt: now().toISOString(),
+            recipientName: cleanText(body.recipientName, 100).trim(),
+            message: cleanText(body.message, 300), createdAt: now().toISOString(),
           }
           state.vouchers.push(created)
           return created
@@ -409,7 +484,7 @@ export function createApp(options = {}) {
         if (!payment) return html(res, 404, demoPage({ message: 'Ismeretlen fizetés.' }))
         const form = new URLSearchParams(req.method === 'POST' ? await readRaw(req) : '')
         const back = (form.get('return') || url.searchParams.get('return') || '')
-        const safeBack = back.startsWith(config.publicUrl) ? back : config.publicUrl
+        const safeBack = isOwnUrl(back) ? back : config.publicUrl
         if (req.method === 'GET') return html(res, 200, demoPage({ payment, back: safeBack }))
         const digits = (form.get('card') || '').replace(/\D/g, '')
         if (payment.status === 'paid' || digits === '4242424242424242') {
@@ -450,7 +525,83 @@ export function createApp(options = {}) {
       }
 
       // ===== admin =====
-      if (path.startsWith('/api/admin/') && !sameToken(req.headers.authorization, `Bearer ${config.adminToken}`)) return json(res, 401, { error: 'admin_auth_required' })
+      // ----- új admin eszköz párosítása (nyilvános, de csak érvényes párosító kóddal) -----
+      if (req.method === 'POST' && path === '/api/devices/pair') {
+        const ip = ipOf(req)
+        if (pairFailures.blocked(ip) || pairFailuresGlobal.blocked('all')) return json(res, 429, { error: 'too_many_requests' }, { 'retry-after': String(Math.max(pairFailures.retryAfter(ip), pairFailuresGlobal.retryAfter('all'))) })
+        const body = await readBody(req)
+        const codeHash = hashHex(normalizeCode(body.code))
+        const token = randomBytes(32).toString('base64url')
+        const result = await store.update((state) => {
+          state.pairings ??= []; state.devices ??= []
+          const nowIso = now().toISOString()
+          state.pairings = state.pairings.filter((item) => !item.usedAt && item.expiresAt > nowIso) // lejártak/felhasználtak törlése
+          const pairing = state.pairings.find((item) => sameSecret(item.codeHash, codeHash))
+          if (!pairing) return { error: 'invalid_pairing_code' }
+          if (state.devices.filter((item) => !item.revokedAt).length >= MAX_DEVICES) return { error: 'too_many_devices' }
+          pairing.usedAt = nowIso
+          const device = { id: randomUUID(), name: cleanText(body.name, 60).trim() || 'Eszköz', tokenHash: hashHex(token), createdAt: nowIso, lastSeenAt: nowIso, pairedBy: pairing.createdBy }
+          state.devices.push(device)
+          return { device }
+        })
+        if (result.error === 'invalid_pairing_code') {
+          pairFailures.hit(ip); pairFailuresGlobal.hit('all')
+          log.error?.('[biztonság] hibás párosító kód')
+          return json(res, 400, { error: result.error })
+        }
+        if (result.error) return json(res, 409, { error: result.error })
+        deviceCache = null
+        log.info?.(`[biztonság] új admin eszköz párosítva: ${result.device.name}`)
+        background(notifier.notifyOwner(`Új eszköz az admin appban – ${result.device.name}`, { eszkoz: result.device.name, ido: formatDateTime(result.device.createdAt, config.timezone), figyelem: 'Ha nem te voltál, tiltsd le az admin app Eszközök fülén.' }))
+        return json(res, 201, { token, deviceId: result.device.id, name: result.device.name })
+      }
+
+      if (path.startsWith('/api/admin/')) {
+        const ip = ipOf(req)
+        // NIST SP 800-63B-4 3.2.2 / OWASP: a sikertelen próbálkozások száma korlátozott; kizárás alatt a helyes kulcs sem megy
+        if (adminFailures.blocked(ip)) return json(res, 429, { error: 'too_many_requests' }, { 'retry-after': String(adminFailures.retryAfter(ip)) })
+        req.admin = await authenticateAdmin(req.headers.authorization)
+        if (!req.admin) {
+          adminFailures.hit(ip)
+          log.error?.(`[biztonság] sikertelen admin hitelesítés (${req.method} ${path})`)
+          return json(res, 401, { error: 'admin_auth_required' })
+        }
+      }
+
+      if (req.method === 'GET' && path === '/api/admin/whoami') {
+        return json(res, 200, req.admin.kind === 'device' ? { kind: 'device', deviceId: req.admin.device.id, name: req.admin.device.name } : { kind: 'master' })
+      }
+      if (req.method === 'POST' && path === '/api/admin/devices/pairing') {
+        return json(res, 201, await issuePairing(req.admin.kind === 'device' ? req.admin.device.name : 'mesterkulcs'))
+      }
+      if (req.method === 'GET' && path === '/api/admin/devices') {
+        const currentId = req.admin.kind === 'device' ? req.admin.device.id : null
+        const devices = await store.read((state) => (state.devices ?? []).filter((item) => !item.revokedAt))
+        return json(res, 200, { devices: devices.map(({ id, name, createdAt, lastSeenAt, pairedBy }) => ({ id, name, createdAt, lastSeenAt, pairedBy, current: id === currentId })) })
+      }
+      const deviceRoute = path.match(/^\/api\/admin\/devices\/([\w-]+)$/)
+      if (req.method === 'DELETE' && deviceRoute) {
+        const id = deviceRoute[1] === 'current' && req.admin.kind === 'device' ? req.admin.device.id : deviceRoute[1]
+        const revoked = await store.update((state) => {
+          const item = (state.devices ?? []).find((d) => d.id === id && !d.revokedAt)
+          if (!item) return false
+          item.revokedAt = now().toISOString()
+          return true
+        })
+        deviceCache = null
+        if (revoked) log.info?.('[biztonság] admin eszköz letiltva')
+        return revoked ? json(res, 200, { ok: true }) : json(res, 404, { error: 'not_found' })
+      }
+
+      // Diagnosztika az adminnak: melyik fejlécből jön a kliens-IP (a valódi IP-t a korlátozók ebből veszik)
+      if (req.method === 'GET' && path === '/api/admin/security') {
+        const { ip, source } = clientIp(req, config.trustProxy)
+        return json(res, 200, {
+          clientIp: ip, source, trustProxy: config.trustProxy, adminTokenHashed: Boolean(config.adminTokenSha256), demoPayments: config.demoPayments,
+          limits: { createPerHour: config.createPerHour, createPerDay: config.createPerDay, maxPendingHolds: config.maxPendingHolds, minFormMs: config.minFormMs, adminMaxFailures: config.adminMaxFailures },
+          tracked: { createHourly: createHourly.size(), adminFailures: adminFailures.size(), tokenFailures: tokenFailures.size() },
+        })
+      }
 
       if (req.method === 'GET' && path === '/api/admin/bookings') {
         // Gyors út: sima olvasás; írási tranzakció csak akkor, ha van lejárt fizetési határidő

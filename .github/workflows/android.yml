@@ -10,6 +10,8 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: expo-app } }
+    # Az APK-ba épített admin eszközkulcs (a szerveren csak a lenyomata van); a JS-csomag a Gradle lépésben készül
+    env: { EXPO_PUBLIC_ADMIN_KEY: '${{ secrets.NBE_APK_KEY }}' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
