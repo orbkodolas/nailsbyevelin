@@ -405,10 +405,11 @@ export function createApp(options = {}) {
           })
         }
         background(notifier.ownerBookingEvent(booking, 'created'))
-        background(notifier.guestBookingMail(booking))
+        // Fizetést igénylő foglalásnál a vendég levelét a fizetés rögzítése után küldjük (afterPaid)
+        if (booking.status !== 'pending_payment') background(notifier.guestBookingMail(booking))
         const policy = booking.paymentReason === 'prepay_after_strike'
-          ? 'A korábbi elmaradt alkalom miatt az időpont a teljes összeg előre fizetése után válik véglegessé.'
-          : booking.status === 'pending_payment' ? 'Az időpont a fizetés után válik véglegessé.' : 'Az időpont rögzítve. Ha nem tudsz eljönni, a lenti linken mondd le.'
+          ? 'A korábbi elmaradt alkalom miatt a teljes összeget előre kell fizetned az időpont rögzítéséhez.'
+          : booking.status === 'pending_payment' ? 'Az időpont a fizetéssel rögzül.' : 'Az időpont rögzítve. Ha nem tudsz eljönni, a lenti linken mondd le.'
         return json(res, 201, { ...publicBooking(booking), manageToken, manageUrl: notifier.manageUrl(booking), payment, policy })
       }
 

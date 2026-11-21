@@ -245,7 +245,7 @@ function Done({ booking, emailEnabled, onPay }: { booking: CreatedBooking; email
   return (
     <div className="done">
       <p className="eyebrow" data-done><span className="eyebrow-line" />{waiting ? 'Még egy lépés' : 'Rögzítettem'}</p>
-      <h3 data-done>{waiting ? 'Az időpontod a fizetés után végleges.' : `Köszönöm, ${booking.firstName}!`}</h3>
+      <h3 data-done>{waiting ? 'Fizesd ki az előleget az időpont rögzítéséhez.' : `Köszönöm, ${booking.firstName}!`}</h3>
       <p className="done-when" data-done>{booking.serviceName}<br />{formatWhen(booking.startsAt)}</p>
       <p data-done>{booking.policy}</p>
       {payment?.checkoutUrl && payment.provider !== 'demo' && <p data-done>Átirányítalak a biztonságos fizetéshez… <a className="btn-link" href={payment.checkoutUrl}>Ha nem történik semmi, kattints ide</a></p>}
@@ -253,7 +253,7 @@ function Done({ booking, emailEnabled, onPay }: { booking: CreatedBooking; email
       {payment?.error && <p className="notice" data-done>A fizetési oldal most nem érhető el. A foglalásod linkjén később újra megpróbálhatod.</p>}
       {waiting && payment?.provider === 'demo' && <button className="btn btn-primary" type="button" data-done onClick={onPay}><span>Fizetés · {forint(payment.amountHuf)}</span></button>}
       <div className="done-link" data-done>
-        <p>{emailEnabled ? 'A linket e-mailben is elküldtem. Itt tudod követni vagy lemondani az időpontot:' : 'Mentsd el ezt a linket: itt tudod követni vagy lemondani az időpontot.'}</p>
+        <p>{emailEnabled && !waiting ? 'A linket e-mailben is elküldtem. Itt tudod követni vagy lemondani az időpontot:' : 'Mentsd el ezt a linket: itt tudod követni vagy lemondani az időpontot.'}</p>
         <a href={manageUrl}>{manageUrl}</a>
         <button type="button" className="btn-link" onClick={copy}>{copied ? 'Kimásolva' : 'Link másolása'}</button>
       </div>

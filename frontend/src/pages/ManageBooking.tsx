@@ -6,7 +6,7 @@ import { Modal } from '../components/Modal'
 import { DemoPayment } from '../components/DemoPayment'
 
 const STATUS: Record<string, { label: string; tone: 'ok' | 'wait' | 'off' }> = {
-  booked: { label: 'Rögzítve', tone: 'ok' }, pending_payment: { label: 'Fizetésre vár', tone: 'wait' }, cancelled: { label: 'Lemondva', tone: 'off' },
+  booked: { label: 'Rögzítve', tone: 'ok' }, pending_payment: { label: 'Fizetés szükséges', tone: 'wait' }, cancelled: { label: 'Lemondva', tone: 'off' },
   expired: { label: 'Lejárt', tone: 'off' }, no_show: { label: 'Elmaradt', tone: 'off' }, completed: { label: 'Teljesítve', tone: 'ok' }, rejected: { label: 'Elutasítva', tone: 'off' },
 }
 
@@ -14,7 +14,7 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
   const [booking, setBooking] = useState<PublicBooking | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [askCancel, setAskCancel] = useState(false)
+  const [askCancel, setAskCancel] = useState(query.get('lemondas') === '1')
   const [payment, setPayment] = useState<Payment | null>(null)
   const [payOpen, setPayOpen] = useState(false)
 
@@ -60,10 +60,10 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
           {booking.amountDueHuf > 0 && <div><dt>Előre fizetendő</dt><dd>{forint(booking.amountDueHuf)}{booking.paymentStatus === 'paid' || booking.paymentStatus === 'paid_manual' ? ' (kifizetve)' : ''}</dd></div>}
         </dl>
 
-        {query.get('cancelled') && booking.status === 'pending_payment' && <p className="notice">A fizetés megszakadt. Az időpontot a lenti gombbal fizetheted ki.</p>}
+        {query.get('cancelled') && booking.status === 'pending_payment' && <p className="notice">A fizetés megszakadt. Az előleget a lenti gombbal fizetheted ki.</p>}
         {booking.status === 'pending_payment' && (
           <div className="status-actions">
-            <p>Az időpont {booking.holdExpiresAt ? `${formatWhen(booking.holdExpiresAt)}-ig` : 'rövid ideig'} van fenntartva, utána automatikusan felszabadul.</p>
+            <p>Az időpont rögzítéséhez fizesd ki az előleget{booking.holdExpiresAt ? ` ${formatWhen(booking.holdExpiresAt)}-ig` : ' rövid időn belül'}.</p>
             <button className="btn btn-primary" type="button" disabled={busy} onClick={pay}><span>Fizetés</span></button>
             {payment?.instructions && <p className="notice">{payment.instructions}</p>}
           </div>
@@ -73,7 +73,7 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
             <button className="btn btn-primary" type="button" disabled={busy} onClick={() => run(() => bookingAction(id, token, 'confirm'))}><span>Megerősítem</span></button></div>
         )}
         {active && confirmed && <p className="hint">Köszönöm! Pontosan érkezz, kísérő nélkül. Egy szett legalább 2 órát vesz igénybe.</p>}
-        {booking.status === 'expired' && <p className="notice">A fizetés nem érkezett meg időben, ezért az időpont felszabadult. <a href="#/">Foglalj újat</a>.</p>}
+        {booking.status === 'expired' && <p className="notice">A fizetés nem érkezett meg időben, ezért ez az időpont nem jött létre. <a href="#/">Foglalj újat</a>.</p>}
         {booking.status === 'cancelled' && <p className="hint">Köszönöm, hogy szóltál. {booking.lateCancellation ? 'Szívesen látlak máskor is.' : ''}</p>}
 
         {(active || booking.status === 'pending_payment') && (
