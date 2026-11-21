@@ -49,7 +49,8 @@ export function loadConfig(env = process.env, overrides = {}) {
     // Értesítések
     formSubmitEmail: env.FORMSUBMIT_EMAIL || '',
     resendApiKey: env.RESEND_API_KEY || '',
-    mailFrom: env.MAIL_FROM || '',
+    brevoApiKey: env.BREVO_API_KEY || '', // alternatíva a Resendre: ingyenes, domain nélkül is (megerősített feladó-címmel)
+    mailFrom: env.MAIL_FROM || '', // 'Nails by Evelin <cim@pelda.hu>' vagy csak a cím
     reminderTickSeconds: num(env.REMINDER_TICK_SECONDS, 60),
 
     // Élő csevegés: push az admin appba (Firebase szolgáltatásfiók JSON, nyersen vagy base64-ben)

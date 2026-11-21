@@ -203,3 +203,19 @@ test('chat: védelem – túl gyors kitöltés csendben elnyelve, régi oldal fr
     assert.equal((await call('GET', '/api/admin/chats', undefined, admin)).body.chats.length, 0)
   })
 })
+
+test('levél: Brevo API-n megy, a feladó neve és címe szétválik', async () => {
+  const calls = []
+  const fetchImpl = async (url, init) => { calls.push({ url, init }); return new Response('{}', { status: 201 }) }
+  const dir = await mkdtemp(join(tmpdir(), 'nails-mail-'))
+  const app = createApp({ dataFile: join(dir, 'db.json'), adminToken: 'test-secret', fetchImpl, log: { info() {}, error() {} }, config: { brevoApiKey: 'k', mailFrom: 'Nails by Evelin <evelin@example.com>' } })
+  assert.equal(app.config.brevoApiKey, 'k')
+  const { createNotifier } = await import('../src/notify.js')
+  const notifier = createNotifier({ config: app.config, fetchImpl, log: { info() {}, error() {} } })
+  assert.equal(await notifier.sendMail({ to: 'vendeg@example.com', subject: 'Teszt', text: 'Szia' }), 'sent')
+  const body = JSON.parse(calls[0].init.body)
+  assert.equal(calls[0].url, 'https://api.brevo.com/v3/smtp/email')
+  assert.deepEqual(body.sender, { name: 'Nails by Evelin', email: 'evelin@example.com' })
+  assert.equal(calls[0].init.headers['api-key'], 'k')
+  await rm(dir, { recursive: true, force: true })
+})

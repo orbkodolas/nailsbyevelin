@@ -7,18 +7,32 @@ export function formatDateTime(iso, timeZone) {
 }
 
 export function createNotifier({ config, fetchImpl, log = console }) {
+  const mailEnabled = Boolean((config.brevoApiKey || config.resendApiKey) && config.mailFrom)
+  // 'Név <cím>' vagy sima cím → { name, email } (Brevo)
+  const sender = (() => {
+    const match = /^\s*(?:"?([^"<]*?)"?\s*)?<([^>]+)>\s*$/.exec(config.mailFrom || '')
+    return match ? { name: match[1] || undefined, email: match[2] } : { email: String(config.mailFrom || '').trim() }
+  })()
+
   async function sendMail({ to, subject, text }) {
-    if (!config.resendApiKey || !config.mailFrom || !to) {
+    if (!mailEnabled || !to) {
       // Személyes adat (e-mail cím) nem kerül a naplóba, csak a domain
       log.info?.(`[levél – nincs küldő beállítva] ${to ? `***@${String(to).split('@')[1] ?? '?'}` : '(nincs cím)'} | ${subject.replace(/–.*$/, '–…')}`)
       return 'not_configured'
     }
     try {
-      const response = await fetchImpl('https://api.resend.com/emails', {
-        method: 'POST', signal: AbortSignal.timeout(10_000),
-        headers: { authorization: `Bearer ${config.resendApiKey}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ from: config.mailFrom, to, subject, text }),
-      })
+      const response = config.brevoApiKey
+        ? await fetchImpl('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST', signal: AbortSignal.timeout(10_000),
+          headers: { 'api-key': config.brevoApiKey, 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({ sender, to: [{ email: to }], subject, textContent: text }),
+        })
+        : await fetchImpl('https://api.resend.com/emails', {
+          method: 'POST', signal: AbortSignal.timeout(10_000),
+          headers: { authorization: `Bearer ${config.resendApiKey}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ from: config.mailFrom, to, subject, text }),
+        })
+      if (!response.ok) log.error?.(`[levél] a szolgáltató HTTP ${response.status} választ adott`)
       return response.ok ? 'sent' : 'failed'
     } catch { return 'failed' }
   }
@@ -39,7 +53,7 @@ export function createNotifier({ config, fetchImpl, log = console }) {
   const signoff = '\nSzeretettel,\nNails by Evelin'
 
   return {
-    sendMail, notifyOwner, manageUrl,
+    sendMail, notifyOwner, manageUrl, mailEnabled,
 
     ownerBookingEvent(booking, event) {
       const labels = { created: 'Új időpontkérés', paid: 'Befizetve', cancelled: 'Lemondva', late_cancelled: 'Késői lemondás (24 órán belül)' }

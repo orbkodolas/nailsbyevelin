@@ -284,7 +284,7 @@ export function createApp(options = {}) {
   async function tick() {
     await liveChat.tick().catch((error) => log.error?.('[chat]', error))
     const changed = await store.update((state) => expireHolds(state))
-    if (!config.resendApiKey || !config.mailFrom) return { expired: changed }
+    if (!notifier.mailEnabled) return { expired: changed }
     const due = await store.read((state) => state.reminders.filter((item) => item.status === 'queued' && item.dueAt <= now().toISOString()).map((item) => ({ ...item, booking: state.bookings.find((b) => b.id === item.bookingId) })))
     for (const reminder of due) {
       const { booking } = reminder
@@ -311,7 +311,7 @@ export function createApp(options = {}) {
       if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true, service: 'nailsbyevelin-api' })
 
       if (req.method === 'GET' && (path === '/api/catalog' || path === '/api/services')) {
-        return json(res, 200, { ...catalog, services, rules: publicRules, timezone: config.timezone, depositPercent: config.depositPercent, emailEnabled: Boolean(config.resendApiKey && config.mailFrom), paymentMethods: payments.list(), maxDaysAhead: config.maxDaysAhead, closedDays: config.closedDays })
+        return json(res, 200, { ...catalog, services, rules: publicRules, timezone: config.timezone, depositPercent: config.depositPercent, emailEnabled: notifier.mailEnabled, paymentMethods: payments.list(), maxDaysAhead: config.maxDaysAhead, closedDays: config.closedDays })
       }
 
       if (req.method === 'GET' && path === '/api/availability') {
