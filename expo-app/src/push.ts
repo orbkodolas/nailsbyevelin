@@ -2,7 +2,8 @@
 // Az értesítésben Evelin válaszolhat (szöveges válasz) vagy elutasíthat („Most nem”) – bezárt appnál is:
 // ilyenkor az Android a háttérfeladatot (TaskManager) futtatja, ami elküldi a választ a szervernek.
 // Ezt a modult az index.ts tölti be legelőször, mert a háttérfeladatot a modul szintjén kell definiálni.
-import { Platform } from 'react-native'
+import { useEffect, useState } from 'react'
+import { AppState, Platform } from 'react-native'
 import * as Notifications from 'expo-notifications'
 import * as TaskManager from 'expo-task-manager'
 import { chatAction, chatReply, loadToken, registerPushToken } from './api'
@@ -102,16 +103,60 @@ export async function setupChatNotifications() {
   if (!(await TaskManager.isTaskRegisteredAsync(TASK))) await Notifications.registerTaskAsync(TASK)
 }
 
+type PushStatus = { state: 'idle' | 'loading' | 'ready' | 'denied' | 'error'; message?: string }
+let pushStatus: PushStatus = { state: 'idle' }
+const pushListeners = new Set<() => void>()
+function setPushStatus(value: PushStatus) { pushStatus = value; pushListeners.forEach((fn) => fn()) }
+export function usePushStatus() {
+  const [, update] = useState(0)
+  useEffect(() => {
+    const fn = () => update((n) => n + 1)
+    pushListeners.add(fn)
+    return () => { pushListeners.delete(fn) }
+  }, [])
+  return pushStatus
+}
+
 let tokenSub: { remove: () => void } | null = null
 /** Engedélykérés és a készülék FCM-tokenjének elküldése a szervernek (változáskor újra). */
 export async function registerForChatPush() {
   if (Platform.OS !== 'android') return false
-  await setupChatNotifications()
-  const perm = await Notifications.getPermissionsAsync()
-  const granted = perm.granted || (perm.canAskAgain && (await Notifications.requestPermissionsAsync()).granted)
-  if (!granted) return false
-  const { data } = await Notifications.getDevicePushTokenAsync()
-  await registerPushToken(String(data))
-  tokenSub ??= Notifications.addPushTokenListener((t) => { registerPushToken(String(t.data)).catch(() => {}) })
-  return true
+  setPushStatus({ state: 'loading' })
+  try {
+    await setupChatNotifications()
+    const perm = await Notifications.getPermissionsAsync()
+    const granted = perm.granted || (perm.canAskAgain && (await Notifications.requestPermissionsAsync()).granted)
+    if (!granted) { setPushStatus({ state: 'denied' }); return false }
+    const { data } = await Notifications.getDevicePushTokenAsync()
+    await registerPushToken(String(data))
+    tokenSub ??= Notifications.addPushTokenListener((t) => {
+      registerPushToken(String(t.data))
+        .then(() => setPushStatus({ state: 'ready' }))
+        .catch((error) => setPushStatus({ state: 'error', message: error instanceof Error ? error.message.slice(0, 240) : 'Sikertelen tokenfrissítés.' }))
+    })
+    setPushStatus({ state: 'ready' })
+    return true
+  } catch (error) {
+    setPushStatus({ state: 'error', message: error instanceof Error ? error.message.slice(0, 240) : 'Ismeretlen regisztrációs hiba.' })
+    throw error
+  }
+}
+
+/** Hálózati/indítási hiba után újrapróbál, és az Android-beállításokból visszatérve újra ellenőriz. */
+export function startChatPush() {
+  let stopped = false
+  let running = false
+  let retry: ReturnType<typeof setTimeout> | undefined
+  const run = async () => {
+    if (stopped || running) return
+    clearTimeout(retry)
+    running = true
+    try { await registerForChatPush() }
+    catch {
+      if (!stopped) retry = setTimeout(run, 15_000)
+    } finally { running = false }
+  }
+  void run()
+  const sub = AppState.addEventListener('change', (state) => { if (state === 'active') void run() })
+  return () => { stopped = true; clearTimeout(retry); sub.remove(); tokenSub?.remove(); tokenSub = null }
 }

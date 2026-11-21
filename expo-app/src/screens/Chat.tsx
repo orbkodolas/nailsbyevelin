@@ -6,6 +6,7 @@ import { dropChat, openChat, putChat, putSettings, useChats } from '../chatStore
 import { c, f, fmtTime, s } from '../theme'
 import { Badge, Button, IconButton, confirm, notice, useLayout } from '../ui'
 import { Devices } from './Devices'
+import { registerForChatPush, usePushStatus } from '../push'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const STATUS: Record<ChatStatus, { label: string; color: string; soft?: string }> = {
@@ -38,6 +39,7 @@ function Countdown({ deadline, offset, size = 13 }: { deadline: string; offset: 
 /** Elérhetőség-kapcsoló és foglaltság (a Naptár értesítés-kapcsolójának stílusában). */
 function Availability({ settings }: { settings: ChatSettings }) {
   const [busy, setBusy] = useState(false)
+  const push = usePushStatus()
   const on = settings.available
   const busyUntil = settings.busyUntil && Date.parse(settings.busyUntil) > Date.now() ? settings.busyUntil : null
 
@@ -60,6 +62,19 @@ function Availability({ settings }: { settings: ChatSettings }) {
           <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: on ? c.bg : c.muted }} />
         </View>
       </Pressable>
+      {push.state === 'denied' && (
+        <View style={{ gap: 6 }}>
+          <Text style={[s.small, { color: c.gold }]}>Az Android nem engedélyezte az értesítéseket.</Text>
+          <Button label="Értesítési beállítások" ghost small onPress={() => { void Linking.openSettings() }} />
+        </View>
+      )}
+      {push.state === 'error' && (
+        <View style={{ gap: 6 }}>
+          <Text style={[s.small, { color: c.gold }]}>Nem sikerült az értesítések regisztrálása. {push.message}</Text>
+          <Button label="Újrapróbálás" ghost small onPress={() => { void registerForChatPush().catch(() => {}) }} />
+        </View>
+      )}
+      {push.state === 'loading' && <Text style={s.small}>Értesítések regisztrálása…</Text>}
       {busyUntil && (
         <View style={[s.row, { justifyContent: 'space-between' }]}>
           <Text style={[s.small, { color: c.gold }]}>{`Foglalt ${fmtTime(busyUntil)}-ig`}</Text>

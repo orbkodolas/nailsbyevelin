@@ -23,7 +23,7 @@ import { DialogLayer, IconButton, confirm, useLayout } from './src/ui'
 import { ToastLayer } from './src/toast'
 import { TabBar } from './src/components/TabBar'
 import { clearChats, openChat, startChatSync, useUnreadCount } from './src/chatStore'
-import { chatIdOf, handleChatAction, registerForChatPush } from './src/push'
+import { chatIdOf, handleChatAction, startChatPush } from './src/push'
 
 const tabs = [
   { key: 'calendar', label: 'Naptár', icon: CalendarDays, Screen: Dashboard },
@@ -74,8 +74,8 @@ export default function App() {
   useEffect(() => {
     if (auth !== 'in') return
     const stop = startChatSync(logout)
-    registerForChatPush().catch(() => {})
-    return stop
+    const stopPush = startChatPush()
+    return () => { stop(); stopPush() }
   }, [auth, logout])
 
   // Értesítésre koppintás / gombos válasz (bezárt appnál is az utolsó válasz)
