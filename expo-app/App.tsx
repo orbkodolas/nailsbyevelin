@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, AppState, Platform, Pressable, Text, View } from 'react-native'
+import { ActivityIndicator, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native'
 import * as Notifications from 'expo-notifications'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { useFonts } from 'expo-font'
@@ -48,6 +48,12 @@ export default function App() {
   const [auth, setAuth] = useState<'loading' | 'in' | 'out'>('loading')
   const [tab, setTab] = useState<(typeof tabs)[number]['key']>('calendar')
   // A már megnyitott fülek életben maradnak (elrejtve): váltáskor nincs újratöltés és újraszámolás
+  const [keyboardVisible, setKeyboardVisible] = useState(false)
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true))
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false))
+    return () => { show.remove(); hide.remove() }
+  }, [])
   const [visited, setVisited] = useState<string[]>(['calendar'])
   useEffect(() => { setVisited((v) => (v.includes(tab) ? v : [...v, tab])) }, [tab])
   const [now, setNow] = useState(() => new Date())
@@ -123,7 +129,8 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" enabled={auth === 'in' && Platform.OS !== 'web'}>
+      <SafeAreaView style={s.screen} edges={keyboardVisible ? ['top'] : ['top', 'bottom']}>
         {(auth === 'loading' || !fontsLoaded) && <ActivityIndicator color={c.rose} style={{ flex: 1 }} />}
         {fontsLoaded && auth === 'out' && <Login onDone={() => setAuth('in')} />}
         {fontsLoaded && auth === 'in' && (desktop ? (
@@ -162,10 +169,11 @@ export default function App() {
           <>
             {header}
             {screen}
-            <TabBar tabs={tabs} active={tab} onSelect={(k) => setTab(k as typeof tab)} badges={badges} />
+            {!keyboardVisible && <TabBar tabs={tabs} active={tab} onSelect={(k) => setTab(k as typeof tab)} badges={badges} />}
           </>
         ))}
       </SafeAreaView>
+      </KeyboardAvoidingView>
       <DialogLayer handleBack />
       <ToastLayer />
     </SafeAreaProvider>

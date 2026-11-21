@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, type ScrollViewInstance, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Linking, Pressable, ScrollView, type ScrollViewInstance, Text, TextInput, View } from 'react-native'
 import { Bell, BellOff, ChevronLeft, Mail, Send, Settings, Trash2 } from 'lucide-react-native'
 import { chatAction, chatReply, deleteChat, errorText, setChatSettings, type Chat as ChatData, type ChatMessage, type ChatSettings, type ChatStatus } from '../api'
 import { dropChat, openChat, putChat, putSettings, useChats } from '../chatStore'
@@ -168,7 +168,7 @@ function Thread({ chat, offset }: { chat: ChatData; offset: number }) {
   const canReply = chat.status === 'waiting' || chat.status === 'live' || (chat.status === 'missed' && chat.visitorOnline)
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <View style={{ flex: 1 }}>
       <View style={[s.row, { flexWrap: 'nowrap', paddingTop: 8, paddingBottom: 8 }]}>
         <IconButton icon={ChevronLeft} label="Vissza" onPress={() => openChat(null)} />
         <View style={{ flex: 1 }}>
@@ -198,6 +198,8 @@ function Thread({ chat, offset }: { chat: ChatData; offset: number }) {
       )}
 
       <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={{ gap: 8, paddingVertical: 10 }}
+        keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
+        onLayout={() => scroll.current?.scrollToEnd({ animated: false })}
         onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: false })}>
         {chat.messages.map((m) => <Bubble key={m.id} m={m} />)}
       </ScrollView>
@@ -222,7 +224,7 @@ function Thread({ chat, offset }: { chat: ChatData; offset: number }) {
           </View>
         </View>
       )}
-    </KeyboardAvoidingView>
+    </View>
   )
 }
 

@@ -48,7 +48,7 @@ export function TabBar({ tabs, active, onSelect, badges }: { tabs: readonly Tab[
   const ActiveIcon = tabs[index].icon
 
   return (
-    <View style={{ height: H }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={{ height: H, flexShrink: 0, marginTop: ORB / 2 + 8 }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       {width > 0 && (
         <>
           <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden' }} pointerEvents="none">
