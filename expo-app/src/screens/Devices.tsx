@@ -52,7 +52,7 @@ export function Devices({ onUnauthorized }: { onUnauthorized: () => void }) {
       ListHeaderComponent={
         <View style={{ gap: 12, marginBottom: 4 }}>
           <Text style={s.muted}>
-            Minden eszköz saját kulccsal lép be, amit a telefon titkosítva őriz, és ujjlenyomattal vagy a telefon kódjával nyit.
+            Minden eszköz saját kulccsal lép be, amit a telefon titkosítva őriz.
             Új eszközhöz kérj párosító kódot; elveszett telefont itt tilthatsz le.
           </Text>
           <Button label="Új eszköz párosítása" icon={KeyRound} busy={busy === 'pair'} onPress={pairNew} />

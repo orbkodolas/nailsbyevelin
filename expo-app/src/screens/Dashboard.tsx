@@ -36,9 +36,10 @@ export function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
 
   // Művelet után a szerver válasza a hiteles adat: helyben beírjuk, nem kérjük le újra a teljes listát.
   // Kivétel a „Nem jött el”: az a vendég többi foglalásán is módosítja a számlálót.
-  const onBookingUpdated = useCallback((b: Booking) => {
+  // confirmed === false: azonnali, várható állapot (a szerver válasza még úton van)
+  const onBookingUpdated = useCallback((b: Booking, confirmed?: boolean) => {
     mutate((d) => ({ ...d, bookings: d.bookings.map((x) => (x.id === b.id ? { ...x, ...b } : x)) }))
-    if (b.status === 'no_show') reload(true)
+    if (b.status === 'no_show' && confirmed !== false) reload(true)
   }, [mutate, reload])
   const onBlockAdded = useCallback((block: Block) => { mutate((d) => ({ ...d, blocks: [...d.blocks, block] })) }, [mutate])
   const onBlockRemoved = useCallback((id: string) => { mutate((d) => ({ ...d, blocks: d.blocks.filter((x) => x.id !== id) })) }, [mutate])

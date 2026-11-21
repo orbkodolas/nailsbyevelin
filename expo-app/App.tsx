@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, Text, View } from 'react-native'
+import { ActivityIndicator, AppState, Pressable, Text, View } from 'react-native'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { useFonts } from 'expo-font'
 // Csak a használt betűváltozatok (a csomag gyökeréből importálva mind bekerülne)
@@ -10,7 +10,7 @@ import { Jost_600SemiBold } from '@expo-google-fonts/jost/600SemiBold'
 import { CormorantGaramond_500Medium } from '@expo-google-fonts/cormorant-garamond/500Medium'
 import { CormorantGaramond_500Medium_Italic } from '@expo-google-fonts/cormorant-garamond/500Medium_Italic'
 import { CalendarDays, ChartSpline, Gift, LogOut, ShieldCheck } from 'lucide-react-native'
-import { clearToken, loadToken, revokeDevice, upgradeToDeviceToken, usingBuiltInKey } from './src/api'
+import { clearToken, loadToken, revokeDevice, upgradeToDeviceToken, usingBuiltInKey, wakeServer } from './src/api'
 import { Devices } from './src/screens/Devices'
 import { clearCache } from './src/useLoad'
 import { Dashboard } from './src/screens/Dashboard'
@@ -19,7 +19,7 @@ import { Vouchers } from './src/screens/Vouchers'
 import { Revenue } from './src/screens/Revenue'
 import { c, dayKey, f, fmtDayLong, s } from './src/theme'
 import { DialogLayer, IconButton, confirm, useLayout } from './src/ui'
-import { LockGate } from './src/components/LockGate'
+import { ToastLayer } from './src/toast'
 
 const tabs = [
   { key: 'calendar', label: 'Naptár', icon: CalendarDays, Screen: Dashboard },
@@ -36,12 +36,17 @@ function greeting() {
 export default function App() {
   const [fontsLoaded] = useFonts({ Jost_400Regular, Jost_500Medium, Jost_600SemiBold, CormorantGaramond_500Medium, CormorantGaramond_500Medium_Italic })
   const [auth, setAuth] = useState<'loading' | 'in' | 'out'>('loading')
-  // Kulccsal épp most belépve nem kérünk azonnal ujjlenyomatot is
-  const [freshLogin, setFreshLogin] = useState(false)
   const [tab, setTab] = useState<(typeof tabs)[number]['key']>('calendar')
   // A már megnyitott fülek életben maradnak (elrejtve): váltáskor nincs újratöltés és újraszámolás
   const [visited, setVisited] = useState<string[]>(['calendar'])
   useEffect(() => { setVisited((v) => (v.includes(tab) ? v : [...v, tab])) }, [tab])
+
+  // Megnyitáskor / előtérbe hozáskor felkeltjük a szervert
+  useEffect(() => {
+    wakeServer()
+    const sub = AppState.addEventListener('change', (state) => { if (state === 'active') wakeServer() })
+    return () => sub.remove()
+  }, [])
 
   useEffect(() => {
     loadToken().then((t) => {
@@ -83,8 +88,8 @@ export default function App() {
       <StatusBar style="light" />
       <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
         {(auth === 'loading' || !fontsLoaded) && <ActivityIndicator color={c.rose} style={{ flex: 1 }} />}
-        {fontsLoaded && auth === 'out' && <Login onDone={() => { setFreshLogin(true); setAuth('in') }} />}
-        {fontsLoaded && auth === 'in' && <LockGate startOpen={freshLogin}>{desktop ? (
+        {fontsLoaded && auth === 'out' && <Login onDone={() => setAuth('in')} />}
+        {fontsLoaded && auth === 'in' && (desktop ? (
           // Asztali nézet: oldalsáv a navigációval, mellette a tartalom
           <View style={{ flex: 1, flexDirection: 'row' }}>
             <View style={{ width: 240, borderRightWidth: 1, borderRightColor: c.line, backgroundColor: c.card, paddingHorizontal: 16, paddingVertical: 28, gap: 6 }}>
@@ -131,9 +136,10 @@ export default function App() {
               })}
             </View>
           </>
-        )}</LockGate>}
+        ))}
       </SafeAreaView>
       <DialogLayer handleBack />
+      <ToastLayer />
     </SafeAreaProvider>
   )
 }

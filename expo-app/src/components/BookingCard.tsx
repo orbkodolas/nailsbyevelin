@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { Linking, Text, View } from 'react-native'
 import { Ban, Banknote, Check, Mail, Phone, StickyNote, Undo2, UserX } from 'lucide-react-native'
-import { ApiError, Booking, bookingAction, errorText, getBookings } from '../api'
+import { ApiError, Booking, bookingAction, getBookings } from '../api'
 import { invalidate } from '../useLoad'
 import { c, f, fmtDayLong, dayKey, fmtTime, huf, s } from '../theme'
-import { Badge, Button, IconButton, confirm, notice, showDialog } from '../ui'
+import { Badge, Button, IconButton, confirm, showDialog } from '../ui'
+import { saveInBackground } from '../toast'
 
 export const isActive = (b: Booking) => b.status === 'booked' || b.status === 'pending_payment'
 
@@ -14,9 +15,23 @@ const statusLabel: Record<Booking['status'], [string, string, string]> = {
   no_show: ['Nem jött el', c.danger, c.dangerSoft], expired: ['Lejárt', c.muted, 'rgba(158,140,145,0.12)'],
 }
 
-/** Egy foglalás az idősávban: bal oldalt az idő, jobbra a kártya a teendőkkel. */
-export function BookingCard({ booking: b, onUpdated, now }: { booking: Booking; onUpdated: (b: Booking) => void; now: number }) {
-  const [busy, setBusy] = useState<string | null>(null)
+type Action = Parameters<typeof bookingAction>[1]
+/** A művelet várható eredménye, hogy azonnal látszódjon; a szerver válasza utána felülírja. */
+function predict(b: Booking, action: Action, body?: { reason?: string }): Booking {
+  switch (action) {
+    case 'complete': return { ...b, status: 'completed' }
+    case 'payment-confirmed': return { ...b, status: b.status === 'pending_payment' ? 'booked' : b.status, paymentStatus: 'paid', amountPaidHuf: Math.max(b.amountPaidHuf || 0, b.amountDueHuf || 0) }
+    case 'no-show': return { ...b, status: 'no_show', noShowReason: body?.reason === 'late' ? 'late' : 'no_show' }
+    case 'cancel': return { ...b, status: 'cancelled', cancelledBy: 'admin' }
+    case 'refunded': return { ...b, refundStatus: 'refunded' }
+  }
+}
+
+/**
+ * Egy foglalás az idősávban: bal oldalt az idő, jobbra a kártya a teendőkkel.
+ * onUpdated(b, false): azonnali (várható) állapot; onUpdated(b, true): a szerver által megerősített.
+ */
+export function BookingCard({ booking: b, onUpdated, now }: { booking: Booking; onUpdated: (b: Booking, confirmed?: boolean) => void; now: number }) {
   const [label, color, soft] = statusLabel[b.status] ?? [b.status, c.muted, 'transparent']
   const active = isActive(b)
   const running = active && Date.parse(b.startsAt) <= now && now < Date.parse(b.endsAt)
@@ -26,15 +41,18 @@ export function BookingCard({ booking: b, onUpdated, now }: { booking: Booking; 
   const paid = b.amountPaidHuf || 0
   const gone = b.status === 'cancelled' || b.status === 'no_show' || b.status === 'expired'
 
-  async function run(action: Parameters<typeof bookingAction>[1], body?: unknown) {
-    setBusy(action)
-    try { onUpdated(await bookingAction(b.id, action, body)) }
-    catch (e) {
-      // Elavult helyi adat (pl. a vendég közben lemondta): frissítjük a listát
-      if (e instanceof ApiError && e.status !== 401) invalidate(getBookings)
-      notice('Nem sikerült', errorText(e), 'danger')
-    }
-    finally { setBusy(null) }
+  // Azonnal látszik, a kérés a háttérben megy (alvó szervernél sem kell várni rá); hibánál visszaáll
+  function run(action: Action, body?: { reason?: string }) {
+    const original = b
+    onUpdated(predict(b, action, body), false)
+    saveInBackground(() => bookingAction(b.id, action, body), {
+      done: (saved) => onUpdated(saved, true),
+      failed: (e) => {
+        onUpdated(original, false)
+        // Elavult helyi adat (pl. a vendég közben lemondta): frissítjük a listát
+        if (!(e instanceof ApiError && e.status === 401)) invalidate(getBookings)
+      },
+    })
   }
   const noShow = () => showDialog({
     title: 'Nem jelent meg', message: `${b.name} – ${fmtTime(b.startsAt)}\n\nKésett (30 percnél többet), vagy egyáltalán nem jött el?`, tone: 'danger',
@@ -84,20 +102,20 @@ export function BookingCard({ booking: b, onUpdated, now }: { booking: Booking; 
           {!!b.phone && <IconButton icon={Phone} label="Hívás" color={c.rose} onPress={() => Linking.openURL(`tel:${b.phone}`)} />}
           {!!b.email && <IconButton icon={Mail} label="E-mail" onPress={() => Linking.openURL(`mailto:${b.email}`)} />}
           <View style={{ flex: 1 }} />
-          {b.status === 'booked' && started && <Button small label="Kész" icon={Check} busy={busy === 'complete'} onPress={() => run('complete')} />}
+          {b.status === 'booked' && started && <Button small label="Kész" icon={Check} onPress={() => run('complete')} />}
           {b.refundStatus === 'review' && (
-            <Button small ghost label="Visszautalva" icon={Undo2} busy={busy === 'refunded'}
+            <Button small ghost label="Visszautalva" icon={Undo2}
               onPress={async () => { if (await confirm('Előleg visszautalva?', `${b.name} – ${huf(paid)}. Csak akkor jelöld, ha már elutaltad.`, 'Visszautalva')) run('refunded') }} />
           )}
         </View>
         {active && (
           <View style={s.row}>
             {(b.status === 'pending_payment' || b.status === 'expired') && ['required', 'refund_needed'].includes(b.paymentStatus) &&
-              <Button small label="Fizetés megjött" icon={Banknote} busy={busy === 'payment-confirmed'}
+              <Button small label="Fizetés megjött" icon={Banknote}
                 onPress={async () => { if (await confirm('Fizetés megerősítése', `${b.name} befizetése megérkezett?`)) run('payment-confirmed') }} />}
-            {b.status === 'booked' && !started && onItsDay && <Button small ghost label="Kész" icon={Check} busy={busy === 'complete'} onPress={() => run('complete')} />}
-            {started && <Button small ghost label="Nem jött el" icon={UserX} busy={busy === 'no-show'} onPress={noShow} />}
-            <Button small ghost danger label="Lemondás" icon={Ban} busy={busy === 'cancel'}
+            {b.status === 'booked' && !started && onItsDay && <Button small ghost label="Kész" icon={Check} onPress={() => run('complete')} />}
+            {started && <Button small ghost label="Nem jött el" icon={UserX} onPress={noShow} />}
+            <Button small ghost danger label="Lemondás" icon={Ban}
               onPress={async () => {
                 const extra = paid > 0 ? `\n\nBefizetett előleg: ${huf(paid)} – ha visszajár, kézzel kell visszautalnod.` : ''
                 if (await confirm('Foglalás lemondása', `${b.name}\n${fmtDayLong(dayKey(b.startsAt))}, ${fmtTime(b.startsAt)}${extra}`, 'Lemondás', true)) run('cancel')

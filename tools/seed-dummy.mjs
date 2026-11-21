@@ -2,6 +2,7 @@
 // Használat:  node --env-file=backend/.env tools/seed-dummy.mjs                 -> néhány foglalás a következő napokra
 //             node --env-file=backend/.env tools/seed-dummy.mjs --history       -> 2026-08-01 … 2026-11-30 kitöltése
 //                  (--from=YYYY-MM-DD --to=YYYY-MM-DD felülírja); a múltbeliek nagy része teljesült
+//             node --env-file=backend/.env tools/seed-dummy.mjs --soon[=30]     -> egy foglalás ma, N perc múlva (az app 15 perccel előtte értesít)
 //             node --env-file=backend/.env tools/seed-dummy.mjs --remove        -> minden dummy foglalás / szabadnap / utalvány törlése
 //             node --env-file=backend/.env tools/seed-dummy.mjs --reset --yes   -> MINDEN adat törlése (mentéssel), majd 01-02 … 11-30 vegyes tesztadat
 import { randomUUID, randomBytes } from 'node:crypto'
@@ -141,7 +142,14 @@ function resetYear(state, from, to) {
   return `Minden adat törölve, új tesztadat: ${bookings.length} foglalás, ${blocks.length} szabadnap, ${vouchers.length} utalvány ${JSON.stringify(tally)}`
 }
 
-const mode = process.argv.includes('--reset') ? 'reset' : process.argv.includes('--remove') ? 'remove' : process.argv.includes('--history') ? 'history' : 'quick'
+const soonArg = process.argv.find((a) => a === '--soon' || a.startsWith('--soon='))
+const mode = process.argv.includes('--reset') ? 'reset' : process.argv.includes('--remove') ? 'remove' : process.argv.includes('--history') ? 'history' : soonArg ? 'soon' : 'quick'
+function soonPlan(minutes) {
+  // Kezdés: most + N perc, 5 percre felfelé kerekítve, helyi időben
+  const at = new Date(Math.ceil((Date.now() + minutes * 60_000) / 300_000) * 300_000)
+  const time = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at)
+  return [{ date: localDate(at, TZ), time, serviceId: 'gel-francia', name: 'Teszt Vendég', paid: false, status: 'booked' }]
+}
 if (mode === 'reset') {
   if (!process.argv.includes('--yes')) throw new Error('A --reset minden adatot töröl; megerősítéshez add hozzá: --yes')
   const { writeFileSync } = await import('node:fs')
@@ -160,7 +168,7 @@ const result = await store.update((state) => {
     state.vouchers = state.vouchers.filter((v) => !v.dummy)
     return `${ids.size} dummy foglalás törölve (a dummy szabadnapok és utalványok is)`
   }
-  const plan = mode === 'history' ? historyPlan(arg('from') ?? '2026-08-01', arg('to') ?? '2026-11-30') : quickPlan()
+  const plan = mode === 'history' ? historyPlan(arg('from') ?? '2026-08-01', arg('to') ?? '2026-11-30') : mode === 'soon' ? soonPlan(Number(soonArg.split('=')[1] ?? 30)) : quickPlan()
   const active = state.bookings.filter((b) => ['booked', 'pending_payment', 'completed'].includes(b.status))
   const tally = {}
   let skipped = 0

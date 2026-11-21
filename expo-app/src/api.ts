@@ -24,7 +24,7 @@ let token: string | null = null
 
 /**
  * Az APK-ba épített eszközkulcs (GitHub secret → EXPO_PUBLIC_ADMIN_KEY a buildnél; a forráskódban nincs).
- * Az APK maga a kulcs: telepítés/újratelepítés után nem kell párosítani, a telefon zárja (LockGate) védi.
+ * Az APK maga a kulcs: telepítés/újratelepítés után nem kell párosítani, és nincs külön zár sem.
  * Ha kiszivárog: a szerveren az Eszközök fülön letiltható, és új kulccsal új APK készül.
  */
 export const BUILT_IN_KEY = process.env.EXPO_PUBLIC_ADMIN_KEY || ''
@@ -84,6 +84,9 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   if (!res.ok) throw new ApiError(res.status, data.error ?? 'unknown', data)
   return data as T
 }
+
+/** Az alvó szerver (Render) felébresztése már az app megnyitásakor, hogy mire műveletet indítasz, ébren legyen. */
+export const wakeServer = () => { fetch(`${API_URL}/health`, { mode: 'no-cors' }).catch(() => {}) } // no-cors: webes előnézetben se legyen CORS-hiba
 
 export const getBookings = () => api<{ bookings: Booking[]; blocks: Block[] }>('/api/admin/bookings')
 export const bookingAction = (id: string, action: 'no-show' | 'payment-confirmed' | 'complete' | 'cancel' | 'refunded', body?: unknown) =>

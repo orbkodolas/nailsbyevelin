@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pressable, Text, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
 import { ZoomIn } from 'lucide-react-native'
@@ -41,6 +41,14 @@ export function RevenueChart({ points, onZoomIn, onZoomOut, onTouchActive }: Pro
   const lastTap = useRef(0)
   const moved = useRef(false)
   const startX = useRef(0)
+  // Az oldal görgetésének tiltása/feloldása. Nagyításkor a görbe újraépül (új key), miközben az ujjak még lent
+  // vannak: a régi példány ilyenkor nem kap „elengedés” eseményt, ezért unmountkor és nagyítás előtt is feloldjuk,
+  // különben a görgetés letiltva maradna.
+  const touching = useRef(false)
+  const touchCb = useRef(onTouchActive)
+  touchCb.current = onTouchActive
+  const setTouch = (on: boolean) => { if (touching.current !== on) { touching.current = on; touchCb.current(on) } }
+  useEffect(() => () => { if (touching.current) { touching.current = false; touchCb.current(false) } }, [])
 
   const n = points.length
   const index = Math.min(active ?? n - 1, n - 1)
@@ -65,7 +73,7 @@ export function RevenueChart({ points, onZoomIn, onZoomOut, onTouchActive }: Pro
   }
 
   function onGrant(e: GestureResponderEvent) {
-    onTouchActive(true)
+    setTouch(true)
     moved.current = false
     startX.current = e.nativeEvent.locationX
     pinch.current = null
@@ -82,9 +90,10 @@ export function RevenueChart({ points, onZoomIn, onZoomOut, onTouchActive }: Pro
         pinch.current.done = true
         const mid = (touches[0].locationX + touches[1].locationX) / 2
         const i = indexAt(mid)
-        if (points[i]?.zoomable) onZoomIn(i)
+        if (points[i]?.zoomable) { setTouch(false); onZoomIn(i) }
       } else if (!pinch.current.done && d / pinch.current.start < 0.75) {
         pinch.current.done = true
+        setTouch(false)
         onZoomOut()
       }
       return
@@ -94,7 +103,7 @@ export function RevenueChart({ points, onZoomIn, onZoomOut, onTouchActive }: Pro
     setActive(indexAt(e.nativeEvent.locationX))
   }
   function onRelease() {
-    onTouchActive(false)
+    setTouch(false)
     const now = Date.now()
     if (pinch.current || moved.current) lastTap.current = 0
     else if (now - lastTap.current < 320) {
@@ -138,7 +147,7 @@ export function RevenueChart({ points, onZoomIn, onZoomOut, onTouchActive }: Pro
         onResponderGrant={onGrant as never}
         onResponderMove={onMove}
         onResponderRelease={onRelease}
-        onResponderTerminate={() => { onTouchActive(false); pinch.current = null }}
+        onResponderTerminate={() => { setTouch(false); pinch.current = null }}
         // Asztalon egérmozgásra is követ
         onPointerMove={(e) => { const x = (e.nativeEvent as unknown as { offsetX?: number }).offsetX; if (typeof x === 'number' && e.nativeEvent.pointerType === 'mouse') setActive(indexAt(x)) }}>
         {width > 0 && (

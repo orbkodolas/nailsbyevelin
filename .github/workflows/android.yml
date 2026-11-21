@@ -23,7 +23,8 @@ jobs:
       - run: npx expo prebuild --platform android --no-install
       - name: Gradle assembleRelease
         working-directory: expo-app/android
-        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a,armeabi-v7a
+        # Gyorsítás: csak 64 bites ARM (2017 utáni telefonok), Gradle build cache (setup-gradle menti), lint kihagyva
+        run: ./gradlew assembleRelease --no-daemon --build-cache -x lintVitalRelease -PreactNativeArchitectures=arm64-v8a
       - uses: actions/upload-artifact@v4
         with:
           name: nailsbyevelin-admin-apk

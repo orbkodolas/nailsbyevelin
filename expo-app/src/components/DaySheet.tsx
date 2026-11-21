@@ -7,11 +7,12 @@ import { invalidate } from '../useLoad'
 import { c, f, fmtDayLong, fmtTime, huf, s } from '../theme'
 import { Button, DialogLayer, IconButton, confirm, dismissDialog, notice, showDialog, useLayout } from '../ui'
 import { BookingCard, isActive } from './BookingCard'
+import { saveInBackground, ToastLayer } from '../toast'
 
 type Props = {
   day: string | null; today: string; bookings: Booking[]; blocks: Block[]; fullDayBlocked: boolean; closed: boolean; now: number
   onClose: () => void
-  onBookingUpdated: (b: Booking) => void
+  onBookingUpdated: (b: Booking, confirmed?: boolean) => void
   onBlockAdded: (b: Block) => void
   onBlockRemoved: (id: string) => void
 }
@@ -104,7 +105,7 @@ export function DaySheet({ day, today, bookings, blocks, fullDayBlocked, closed,
           text: 'Letiltás + lemondás', style: 'destructive', onPress: () => withBusy(async () => {
             onBlockAdded(await addBlockDay(day!, 'Sürgős szabadnap', true))
             const cancelled = await Promise.all(list.map((b) => bookingAction(b.id, 'cancel', { reason: 'urgent_block' })))
-            cancelled.forEach(onBookingUpdated)
+            cancelled.forEach((b) => onBookingUpdated(b, true))
             notice('Kész', `A nap letiltva, ${list.length} foglalás lemondva.\n\nKérlek, hívd fel a vendégeket:\n${names}`, 'ok')
           }),
         },
@@ -114,7 +115,9 @@ export function DaySheet({ day, today, bookings, blocks, fullDayBlocked, closed,
 
   async function unblock(block: Block) {
     if (!(await confirm('Tiltás feloldása', 'Erre az időre újra lehet majd foglalni.', 'Feloldás'))) return
-    withBusy(async () => { await deleteBlock(block.id); onBlockRemoved(block.id) })
+    // Azonnal eltűnik, a törlés a háttérben megy; hibánál visszakerül
+    onBlockRemoved(block.id)
+    saveInBackground(() => deleteBlock(block.id), { failed: () => onBlockAdded(block) })
   }
 
   async function withBusy(task: () => Promise<unknown>) {
@@ -193,6 +196,7 @@ export function DaySheet({ day, today, bookings, blocks, fullDayBlocked, closed,
           )}
         </Animated.View>
         <DialogLayer />
+        <ToastLayer />
       </View>
     </Modal>
   )

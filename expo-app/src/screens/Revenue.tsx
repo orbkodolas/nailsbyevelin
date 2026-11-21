@@ -1,8 +1,9 @@
-import { useMemo, useState, type ComponentType } from 'react'
+import { useEffect, useMemo, useState, type ComponentType } from 'react'
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { Ban, CalendarCheck, CalendarOff, CalendarX2, ChevronRight, CircleCheck, Clock, Hourglass, Siren, UserX, ZoomOut } from 'lucide-react-native'
 import { Block, Booking, getBookings } from '../api'
 import { RevenueChart, type Point } from '../components/RevenueChart'
+import { CountUp, countUpPending, markCountUpPlayed } from '../components/CountUp'
 import { addDays, c, dayKey, f, fmtDayLong, fmtTime, huf, MONTHS, s, weekdayOf } from '../theme'
 import { useLayout } from '../ui'
 import { useLoad } from '../useLoad'
@@ -57,6 +58,9 @@ export function Revenue({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [stack, setStack] = useState<Frame[]>(() => [rootFrame('day', today)])
   const [scrollOn, setScrollOn] = useState(true)
   const frame = stack[stack.length - 1]
+  // Hidegindítás utáni első megjelenéskor a számok felszámolnak (CountUp.js-szerű easeOutExpo)
+  const [intro] = useState(countUpPending)
+  useEffect(() => { if (data) markCountUpPlayed() }, [data])
 
   // Napi összesítés egyszer; minden nézet ebből számol
   const agg = useMemo(() => {
@@ -121,15 +125,15 @@ export function Revenue({ onUnauthorized }: { onUnauthorized: () => void }) {
 
       <View style={[s.card, { padding: 20, gap: 4, backgroundColor: c.raised }]}>
         <Text style={s.eyebrow}>Eddigi teljes bevétel</Text>
-        <Text style={{ color: c.text, fontFamily: f.semibold, fontSize: 48, lineHeight: 56 }} adjustsFontSizeToFit numberOfLines={1}>{huf(tiles.total.value)}</Text>
+        <CountUp value={tiles.total.value} format={huf} animate={intro} duration={1400} style={{ color: c.text, fontFamily: f.semibold, fontSize: 48, lineHeight: 56 }} adjustsFontSizeToFit numberOfLines={1} />
         <Text style={s.small}>{tiles.total.count} vendég · teljesült és lezajlott foglalások alapján</Text>
       </View>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        <Tile label="Ma" value={tiles.today.value} note={`${tiles.today.count} vendég`} basis={wide ? '23%' : '47%'} />
-        <Tile label="Ezen a héten" value={tiles.week.value} note={`${tiles.week.count} vendég`} basis={wide ? '23%' : '47%'} />
-        <Tile label="Ebben a hónapban" value={tiles.month.value} note={`${tiles.month.count} vendég`} basis={wide ? '23%' : '47%'} />
-        <Tile label="Idén" value={tiles.year.value} note={`${tiles.year.count} vendég`} basis={wide ? '23%' : '47%'} />
+        <Tile label="Ma" intro={intro} delay={120} value={tiles.today.value} note={`${tiles.today.count} vendég`} basis={wide ? '23%' : '47%'} />
+        <Tile label="Ezen a héten" intro={intro} delay={200} value={tiles.week.value} note={`${tiles.week.count} vendég`} basis={wide ? '23%' : '47%'} />
+        <Tile label="Ebben a hónapban" intro={intro} delay={280} value={tiles.month.value} note={`${tiles.month.count} vendég`} basis={wide ? '23%' : '47%'} />
+        <Tile label="Idén" intro={intro} delay={360} value={tiles.year.value} note={`${tiles.year.count} vendég`} basis={wide ? '23%' : '47%'} />
       </View>
 
       <View style={wide ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
@@ -211,15 +215,16 @@ export function Revenue({ onUnauthorized }: { onUnauthorized: () => void }) {
       <View style={[s.card, { padding: 0, gap: 0, overflow: 'hidden' }]}>
         <View style={[s.row, { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.line }]}>
           <Text style={[s.small, { flex: 1, fontFamily: f.medium }]}>Hónap</Text>
-          <Text style={[s.small, { width: 70, textAlign: 'right', fontFamily: f.medium }]}>Vendég</Text>
-          <Text style={[s.small, { width: 110, textAlign: 'right', fontFamily: f.medium }]}>Bevétel</Text>
+          <Text style={[s.small, { width: 58, textAlign: 'right', fontFamily: f.medium }]}>Vendég</Text>
+          <Text style={[s.small, { minWidth: 100, textAlign: 'right', fontFamily: f.medium }]}>Bevétel</Text>
         </View>
         {head.months.length === 0 && <Text style={[s.muted, { padding: 16 }]}>Még nincs bevétel.</Text>}
         {head.months.map((m, i) => (
-          <View key={m.key} style={[s.row, { paddingHorizontal: 16, paddingVertical: 11 }, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
-            <Text style={[s.text, { flex: 1 }]}>{monthLabel(m.key)}</Text>
-            <Text style={[s.muted, { width: 70, textAlign: 'right', fontVariant: ['tabular-nums'] }]}>{m.count}</Text>
-            <Text style={[s.text, { width: 110, textAlign: 'right', fontFamily: f.medium, fontVariant: ['tabular-nums'] }]}>{huf(m.value)}</Text>
+          // Egy sorban marad: a hónapnév szükség esetén kicsit összemegy (keskeny telefonon), nem törik két sorba
+          <View key={m.key} style={[s.row, { flexWrap: 'nowrap', paddingHorizontal: 16, paddingVertical: 11 }, i > 0 && { borderTopWidth: 1, borderTopColor: c.line }]}>
+            <Text style={[s.text, { flex: 1, flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{monthLabel(m.key)}</Text>
+            <Text style={[s.muted, { width: 58, textAlign: 'right', fontVariant: ['tabular-nums'] }]}>{m.count}</Text>
+            <Text style={[s.text, { minWidth: 100, textAlign: 'right', fontFamily: f.medium, fontVariant: ['tabular-nums'] }]} numberOfLines={1}>{huf(m.value)}</Text>
           </View>
         ))}
       </View>
@@ -320,11 +325,11 @@ function StatRow({ icon: Icon, label, value, of, unit, note, strong }: { icon: I
   )
 }
 
-function Tile({ label, value, note, basis }: { label: string; value: number; note?: string; basis: `${number}%` }) {
+function Tile({ label, value, note, basis, intro = false, delay = 0 }: { label: string; value: number; note?: string; basis: `${number}%`; intro?: boolean; delay?: number }) {
   return (
     <View style={[s.card, { flexGrow: 1, flexBasis: basis, paddingVertical: 14, gap: 2 }]}>
       <Text style={s.small} numberOfLines={1}>{label}</Text>
-      <Text style={{ color: c.text, fontFamily: f.semibold, fontSize: 22, lineHeight: 28 }} adjustsFontSizeToFit numberOfLines={1}>{huf(value)}</Text>
+      <CountUp value={value} format={huf} animate={intro} delay={delay} style={{ color: c.text, fontFamily: f.semibold, fontSize: 22, lineHeight: 28 }} adjustsFontSizeToFit numberOfLines={1} />
       {!!note && <Text style={[s.small, { color: c.faint }]} numberOfLines={1}>{note}</Text>}
     </View>
   )
