@@ -14,6 +14,10 @@ export type Booking = {
   noShowReason?: 'late' | 'no_show'; cancelledBy?: 'guest' | 'admin'; cancelReason?: 'urgent_block'
 }
 export type Block = { id: string; startsAt: string; endsAt: string; reason: string; urgent?: boolean }
+/** Egyedi nyitás: zárt napon (ünnep, szünnap, vasárnap) ebben az időszakban lehet foglalni. Időpontok helyi időben (HH:MM). */
+export type Opening = { id: string; date: string; start: string; end: string; reason?: string }
+/** A szerver naptárszabályai: évente ismétlődő szünnapok, ünnepnapi zárás, heti munkaidő (0 = vasárnap). */
+export type Schedule = { closedDays: string[]; closeHolidays: boolean; workingHours: Record<string, [string, string][]> }
 export type Voucher = {
   id: string; code: string; status: 'pending_payment' | 'active' | 'redeemed' | string
   amountHuf: number; buyerName: string; buyerEmail: string; recipientName: string
@@ -88,17 +92,17 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 /** Az alvó szerver (Render) felébresztése már az app megnyitásakor, hogy mire műveletet indítasz, ébren legyen. */
 export const wakeServer = () => { fetch(`${API_URL}/health`, { mode: 'no-cors' }).catch(() => {}) } // no-cors: webes előnézetben se legyen CORS-hiba
 
-export const getBookings = () => api<{ bookings: Booking[]; blocks: Block[] }>('/api/admin/bookings')
+export const getBookings = () => api<{ bookings: Booking[]; blocks: Block[]; openings?: Opening[]; schedule?: Schedule }>('/api/admin/bookings')
 export const bookingAction = (id: string, action: 'no-show' | 'payment-confirmed' | 'complete' | 'cancel' | 'refunded', body?: unknown) =>
   api<Booking>(`/api/admin/bookings/${id}/${action}`, { method: 'POST', body: body ?? {} })
 /** Ha közben foglalás került a napra, a szerver 409 'block_has_bookings'-t ad (data.bookings); force: true így is letilt. */
-export const addBlockDay = (date: string, reason: string, force = false) => api<Block>('/api/admin/blocks', { method: 'POST', body: { date, reason, force } })
+export type BlockRequest = { date: string; toDate?: string; start?: string; end?: string; reason: string; force?: boolean }
+/** Egész nap (date), több nap (date + toDate, mindkettő benne van) vagy napon belüli időszak (date + start/end, HH:MM). */
+export const addBlock = (body: BlockRequest) => api<Block>('/api/admin/blocks', { method: 'POST', body })
+export const addOpening = (date: string, start: string, end: string) => api<Opening>('/api/admin/openings', { method: 'POST', body: { date, start, end } })
+export const deleteOpening = (id: string) => api<{ ok: true }>(`/api/admin/openings/${id}`, { method: 'DELETE' })
 export type Conflict = Pick<Booking, 'id' | 'name' | 'phone' | 'startsAt'>
 export const deleteBlock = (id: string) => api<{ ok: true }>(`/api/admin/blocks/${id}`, { method: 'DELETE' })
-/** Évente ismétlődő szünnapok (HH-NN) a nyilvános katalógusból; régi backendnél az alapértékek. */
-export const DEFAULT_CLOSED_DAYS = ['12-24', '12-25', '12-26', '12-31', '01-01']
-export const getClosedDays = () =>
-  api<{ closedDays?: string[] }>('/api/catalog').then((d) => d.closedDays ?? DEFAULT_CLOSED_DAYS).catch(() => DEFAULT_CLOSED_DAYS)
 export const getVouchers = () => api<{ vouchers: Voucher[] }>('/api/admin/vouchers')
 export const voucherAction = (id: string, action: 'payment-confirmed' | 'redeem') =>
   api<Voucher>(`/api/admin/vouchers/${id}/${action}`, { method: 'POST', body: {} })

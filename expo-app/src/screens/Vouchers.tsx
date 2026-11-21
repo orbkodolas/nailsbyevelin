@@ -12,24 +12,18 @@ function status(v: Voucher): [string, string] {
   return ({ active: ['Érvényes', c.ok], pending_payment: ['Fizetésre vár', c.gold], redeemed: ['Beváltva', c.muted] } as Record<string, [string, string]>)[v.status] ?? [v.status, c.muted]
 }
 
-type Row = { kind: 'header'; key: string; title: string; count: number } | { kind: 'row'; key: string; items: (Voucher | null)[] }
+type Row = { key: string; items: (Voucher | null)[] }
 
-/** Felül az aktiválásra (fizetésre) váró kódok, alattuk az aktiváltak; csoporton belül a legújabb vásárlás elöl. */
+/** Csak az érvényes, még beváltható utalványok látszanak; a legújabb vásárlás elöl. */
 function buildRows(list: Voucher[], columns: number): Row[] {
-  const newest = (a: Voucher, b: Voucher) => b.createdAt.localeCompare(a.createdAt)
-  const groups = [
-    { key: 'pending', title: 'Aktiválásra vár', items: list.filter((v) => v.status === 'pending_payment').sort(newest) },
-    { key: 'active', title: 'Aktivált', items: list.filter((v) => v.status !== 'pending_payment').sort(newest) },
-  ]
+  const items = list
+    .filter((v) => status(v)[0] === 'Érvényes')
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const rows: Row[] = []
-  for (const g of groups) {
-    if (!g.items.length) continue
-    rows.push({ kind: 'header', key: `h-${g.key}`, title: g.title, count: g.items.length })
-    for (let i = 0; i < g.items.length; i += columns) {
-      const items: (Voucher | null)[] = g.items.slice(i, i + columns)
-      while (items.length < columns) items.push(null) // üres hely, hogy a kártyák egyforma szélesek maradjanak
-      rows.push({ kind: 'row', key: `${g.key}-${i}`, items })
-    }
+  for (let i = 0; i < items.length; i += columns) {
+    const row: (Voucher | null)[] = items.slice(i, i + columns)
+    while (row.length < columns) row.push(null) // üres hely, hogy a kártyák egyforma szélesek maradjanak
+    rows.push({ key: row[0]!.id, items: row })
   }
   return rows
 }
@@ -93,10 +87,8 @@ export function Vouchers({ onUnauthorized }: { onUnauthorized: () => void }) {
           {error && <Text style={{ color: c.danger }}>{error}</Text>}
         </View>
       }
-      ListEmptyComponent={data ? <Text style={s.empty}>{q ? 'Nincs találat.' : 'Még nincs utalvány.'}</Text> : undefined}
-      renderItem={({ item: r }) => r.kind === 'header' ? (
-        <Text style={[s.eyebrow, { marginTop: r.key === rows[0]?.key ? 4 : 12 }]}>{r.title} · {r.count}</Text>
-      ) : (
+      ListEmptyComponent={data ? <Text style={s.empty}>{q ? 'Nincs találat.' : 'Nincs érvényes utalvány.'}</Text> : undefined}
+      renderItem={({ item: r }) => (
         <View style={{ flexDirection: 'row', gap: 12 }}>
           {r.items.map((v, i) => (v ? card(v) : <View key={`empty-${i}`} style={{ flex: 1 }} />))}
         </View>

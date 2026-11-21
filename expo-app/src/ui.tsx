@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { ActivityIndicator, Animated, BackHandler, Easing, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { c, f, s } from './theme'
 
-type IconType = ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
+export type IconType = ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
 
 /** Képernyőméret-kategóriák: telefon < 600 ≤ tablet < 1000 ≤ asztali (laptop/monitor). */
 export function useLayout() {

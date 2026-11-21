@@ -7,7 +7,7 @@ import { catalog, findService, services, publicRules } from './catalog.js'
 import { loadConfig } from './config.js'
 import { createPayments } from './payments.js'
 import { createNotifier, formatDateTime } from './notify.js'
-import { addDays, isDateString, localDate, localTime, overlaps, slotsForDate, zonedToUtc } from './time.js'
+import { addDays, closedByRule, isDateString, isTime, localDate, localTime, overlaps, slotsForDate, zonedToUtc } from './time.js'
 import { adminTokenMatches, cleanText, clientIp, createLimiter, HTML_CSP, isSafeName, sameSecret, setSecurityHeaders } from './security.js'
 
 const HOUR = 60 * 60 * 1000
@@ -167,7 +167,7 @@ export function createApp(options = {}) {
     ...state.bookings.filter(holds),
     ...state.blocks,
   ]
-  const slotsOn = (state, date, durationMinutes) => slotsForDate({ date, durationMinutes, busy: busyRanges(state), config, now: now() })
+  const slotsOn = (state, date, durationMinutes) => slotsForDate({ date, durationMinutes, busy: busyRanges(state), config, now: now(), openings: state.openings ?? [] })
 
   const publicBooking = (booking) => ({
     id: booking.id, status: booking.status === 'pending_payment' && booking.holdExpiresAt <= now().toISOString() ? 'expired' : booking.status, paymentStatus: booking.paymentStatus, confirmationStatus: booking.confirmationStatus,
@@ -618,7 +618,12 @@ export function createApp(options = {}) {
           const bookings = state.bookings.toSorted((a, b) => a.startsAt.localeCompare(b.startsAt)).map((booking) => ({
             ...booking, manageToken: undefined, noShowCount: countFor(booking),
           }))
-          return { bookings, blocks: state.blocks.toSorted((a, b) => a.startsAt.localeCompare(b.startsAt)) }
+          return {
+            bookings, blocks: state.blocks.toSorted((a, b) => a.startsAt.localeCompare(b.startsAt)),
+            openings: (state.openings ?? []).toSorted((a, b) => a.date.localeCompare(b.date)),
+            // Az admin app ebből tudja, mely nap zárt szabály szerint és mi a heti munkaidő
+            schedule: { closedDays: config.closedDays, closeHolidays: config.closeHolidays !== false, workingHours: config.workingHours },
+          }
         }
         const data = (await store.read((state) => (hasExpired(state) ? null : build(state))))
           ?? (await store.update((state) => { expireHolds(state); return build(state) }))
@@ -670,8 +675,14 @@ export function createApp(options = {}) {
       if (req.method === 'POST' && path === '/api/admin/blocks') {
         const body = await readBody(req)
         let startsAt; let endsAt
-        if (isDateString(body.date)) { startsAt = zonedToUtc(body.date, '00:00', config.timezone); endsAt = zonedToUtc(addDays(body.date, 1), '00:00', config.timezone) }
-        else { startsAt = new Date(body.startsAt); endsAt = new Date(body.endsAt) }
+        // date (+ toDate: több napos szabadság) egész napokra; date + start/end helyi időben egy napon belül; vagy startsAt/endsAt
+        if (isDateString(body.date) && isTime(body.start) && isTime(body.end)) {
+          startsAt = zonedToUtc(body.date, body.start, config.timezone); endsAt = zonedToUtc(body.date, body.end, config.timezone)
+        } else if (isDateString(body.date)) {
+          const last = body.toDate === undefined ? body.date : body.toDate
+          if (!isDateString(last) || last < body.date || last > addDays(body.date, 366)) return json(res, 400, { error: 'invalid_range' })
+          startsAt = zonedToUtc(body.date, '00:00', config.timezone); endsAt = zonedToUtc(addDays(last, 1), '00:00', config.timezone)
+        } else { startsAt = new Date(body.startsAt); endsAt = new Date(body.endsAt) }
         if (!Number.isFinite(startsAt.getTime()) || !Number.isFinite(endsAt.getTime()) || endsAt <= startsAt) return json(res, 400, { error: 'invalid_range' })
         const reason = typeof body.reason === 'string' ? body.reason.slice(0, 200) : ''
         // Sürgős: foglalás alatti letiltás (force) vagy kifejezetten sürgősnek jelölt
@@ -690,6 +701,27 @@ export function createApp(options = {}) {
       const blockRoute = path.match(/^\/api\/admin\/blocks\/([\w-]+)$/)
       if (req.method === 'DELETE' && blockRoute) {
         const removed = await store.update((state) => { const before = state.blocks.length; state.blocks = state.blocks.filter((item) => item.id !== blockRoute[1]); return before !== state.blocks.length })
+        return removed ? json(res, 200, { ok: true }) : json(res, 404, { error: 'not_found' })
+      }
+
+      // ----- egyedi nyitás: zárt napon (ünnep, szünnap, munkaidőn kívüli nap) adott időszakban lehet foglalni -----
+      if (req.method === 'POST' && path === '/api/admin/openings') {
+        const body = await readBody(req)
+        if (!isDateString(body.date) || !isTime(body.start) || !isTime(body.end) || body.end <= body.start) return json(res, 400, { error: 'invalid_range' })
+        if (body.date < localDate(now(), config.timezone)) return json(res, 400, { error: 'invalid_range' })
+        const opening = { id: randomUUID(), date: body.date, start: body.start, end: body.end, reason: closedByRule(body.date, config) ?? 'extra_day', createdAt: now().toISOString() }
+        await store.update((state) => {
+          state.openings = [...(state.openings ?? []).filter((item) => item.date !== body.date), opening]
+        })
+        return json(res, 201, opening)
+      }
+      const openingRoute = path.match(/^\/api\/admin\/openings\/([\w-]+)$/)
+      if (req.method === 'DELETE' && openingRoute) {
+        const removed = await store.update((state) => {
+          const before = (state.openings ?? []).length
+          state.openings = (state.openings ?? []).filter((item) => item.id !== openingRoute[1])
+          return before !== state.openings.length
+        })
         return removed ? json(res, 200, { ok: true }) : json(res, 404, { error: 'not_found' })
       }
 

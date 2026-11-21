@@ -289,3 +289,48 @@ test('szünnapok: karácsony, szilveszter és újév nem foglalható', () => {
   assert.ok(slotsForDate({ date: '2026-12-23', durationMinutes: 60, busy: [], config, now }).length > 0)
   assert.ok(slotsForDate({ date: '2027-01-04', durationMinutes: 60, busy: [], config, now }).length > 0)
 })
+
+test('munkaszüneti ünnepnapok zárva; egyedi nyitással adott időszakban foglalható', () => {
+  const config = { workingHours: { 1: [['09:00', '18:00']], 5: [['09:00', '18:00']] }, slotStepMinutes: 60, bufferMinutes: 0, minLeadMinutes: 60, maxDaysAhead: 60, timezone: 'Europe/Budapest', closedDays: [] }
+  const now = new Date('2027-03-01T08:00:00.000Z')
+  // 2027-03-15 hétfő (nemzeti ünnep), 2027-03-26 nagypéntek, 2027-03-29 húsvéthétfő
+  for (const date of ['2027-03-15', '2027-03-26', '2027-03-29']) assert.deepEqual(slotsForDate({ date, durationMinutes: 60, busy: [], config, now }), [], date)
+  assert.ok(slotsForDate({ date: '2027-03-15', durationMinutes: 60, busy: [], config: { ...config, closeHolidays: false }, now }).length > 0)
+  const opened = slotsForDate({ date: '2027-03-15', durationMinutes: 60, busy: [], config, now, openings: [{ date: '2027-03-15', start: '08:00', end: '11:00' }] })
+  assert.deepEqual(opened.map((slot) => slot.time), ['08:00', '09:00', '10:00'])
+})
+
+test('admin: ünnepnap megnyitása és visszazárása; vasárnap is megnyitható', async () => withApi({ config: { maxDaysAhead: 60 } }, async ({ call }) => {
+  const day = async (date) => (await (await call('GET', `/api/availability?serviceId=gel-egyszinu&from=${date}&to=${date}`)).json()).days[date]
+  assert.deepEqual(await day('2026-12-24'), [])
+  assert.equal((await call('POST', '/api/admin/openings', { date: '2026-12-24', start: '12:00', end: '10:00' }, admin)).status, 400)
+  assert.equal((await call('POST', '/api/admin/openings', { date: '2026-12-24', start: '08:00', end: '12:00' })).status, 401)
+  const opening = await (await call('POST', '/api/admin/openings', { date: '2026-12-24', start: '08:00', end: '12:00' }, admin)).json()
+  assert.equal(opening.reason, 'holiday')
+  const slots = await day('2026-12-24')
+  assert.equal(slots[0], '08:00')
+  assert.ok(slots.every((time) => time < '12:00'))
+  const list = await (await call('GET', '/api/admin/bookings', undefined, admin)).json()
+  assert.equal(list.openings.length, 1)
+  assert.equal(list.schedule.closeHolidays, true)
+  assert.equal((await call('DELETE', `/api/admin/openings/${opening.id}`, undefined, admin)).status, 200)
+  assert.deepEqual(await day('2026-12-24'), [])
+  // Vasárnap (nincs munkaidő) egyedi nyitással
+  assert.deepEqual(await day('2026-11-29'), [])
+  await call('POST', '/api/admin/openings', { date: '2026-11-29', start: '10:00', end: '14:00' }, admin)
+  assert.equal((await day('2026-11-29'))[0], '10:00')
+}))
+
+test('admin: több napos szabadság és napon belüli időszak letiltása', async () => withApi({ config: { maxDaysAhead: 60 } }, async ({ call }) => {
+  const day = async (date) => (await (await call('GET', `/api/availability?serviceId=gel-egyszinu&from=${date}&to=${date}`)).json()).days[date]
+  const vacation = await (await call('POST', '/api/admin/blocks', { date: '2026-11-25', toDate: '2026-11-27', reason: 'Szabadság' }, admin)).json()
+  assert.equal(vacation.startsAt, slotAt('2026-11-25', '00:00'))
+  assert.equal(vacation.endsAt, slotAt('2026-11-28', '00:00'))
+  for (const date of ['2026-11-25', '2026-11-26', '2026-11-27']) assert.deepEqual(await day(date), [], date)
+  assert.ok((await day('2026-11-28')).length > 0)
+  assert.equal((await call('POST', '/api/admin/blocks', { date: '2026-11-25', toDate: '2026-11-24' }, admin)).status, 400)
+  const morning = await (await call('POST', '/api/admin/blocks', { date: '2026-11-30', start: '09:00', end: '12:00', reason: 'Délelőtt' }, admin)).json()
+  assert.equal(morning.endsAt, slotAt('2026-11-30', '12:00'))
+  const slots = await day('2026-11-30')
+  assert.ok(slots.length > 0 && slots.every((time) => time >= '12:00'))
+}))

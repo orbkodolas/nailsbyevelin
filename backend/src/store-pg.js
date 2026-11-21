@@ -3,7 +3,7 @@ import pg from 'pg'
 // Postgres-tár (Neon) ugyanazzal a felülettel, mint a JSON-tár: read(reader) / update(mutator).
 // Minden rekord egy sor: (collection, id, data jsonb). Az update egy tranzakcióban, advisory lockkal
 // sorosítva fut, és csak a ténylegesen megváltozott / törölt rekordokat írja vissza.
-const emptyState = () => ({ bookings: [], reminders: [], payments: [], vouchers: [], blocks: [], devices: [], pairings: [] })
+const emptyState = () => ({ bookings: [], reminders: [], payments: [], vouchers: [], blocks: [], openings: [], devices: [], pairings: [] })
 const LOCK_KEY = 74_201_126
 
 // A pg a 'require'-t ma is teljes tanúsítvány-ellenőrzésként kezeli; explicit verify-full = ugyanez, figyelmeztetés nélkül

@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Nails By Evelin Admin",
+    "name": "NailsByEvelin Dashboard",
     "slug": "nailsbyevelin-admin",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,11 +16,10 @@
       "adaptiveIcon": {
         "backgroundColor": "#0c0809",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundImage": "./assets/android-icon-background.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 3
+      "versionCode": 4
     },
     "web": {
       "favicon": "./assets/favicon.png"

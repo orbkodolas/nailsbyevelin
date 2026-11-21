@@ -1,3 +1,5 @@
+import { holidayName } from './holidays.js'
+
 // Időzóna-kezelés külső csomag nélkül (Intl alapú). A munkaidő helyi időben van megadva.
 const formatters = new Map()
 function formatter(timeZone) {
@@ -59,9 +61,25 @@ export const overlaps = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart 
 
 // Egy nap szabad kezdési időpontjai az adott szolgáltatás hosszához.
 // busy: [{ startsAt, endsAt }] ISO-időpontok (foglalások és blokkok).
-export function slotsForDate({ date, durationMinutes, busy, config, now }) {
-  const windows = config.workingHours[weekdayOf(date)] || []
-  if (config.closedDays?.includes(date.slice(5))) return [] // évente ismétlődő szünnapok (HH-NN)
+export const isTime = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+
+// Szabály szerint zárt nap: évente ismétlődő szünnap (HH-NN) vagy munkaszüneti ünnepnap
+export function closedByRule(date, config) {
+  if (config.closeHolidays !== false && holidayName(date)) return 'holiday'
+  if (config.closedDays?.includes(date.slice(5))) return 'closed_day'
+  return null
+}
+
+// A nap munkaideje: egyedi nyitás (pl. ünnepnapon) felülír mindent, különben a szabály és a heti munkaidő
+export function windowsFor(date, config, openings = []) {
+  const opening = openings.find((item) => item.date === date)
+  if (opening) return [[opening.start, opening.end]]
+  if (closedByRule(date, config)) return []
+  return config.workingHours[weekdayOf(date)] || []
+}
+
+export function slotsForDate({ date, durationMinutes, busy, config, now, openings = [] }) {
+  const windows = windowsFor(date, config, openings)
   // Legfeljebb maxDaysAhead nappal előre, naptári napokban (a mai nap is számít)
   if (date > addDays(localDate(now, config.timezone), config.maxDaysAhead)) return []
   const earliest = now.getTime() + config.minLeadMinutes * 60_000

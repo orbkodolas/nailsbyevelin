@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppState, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { Bell, BellOff, ChevronLeft, ChevronRight } from 'lucide-react-native'
-import { Block, Booking, DEFAULT_CLOSED_DAYS, getBookings, getClosedDays } from '../api'
+import { Block, Booking, getBookings, Opening } from '../api'
 import { NextGuest } from '../components/NextGuest'
 import { DaySheet } from '../components/DaySheet'
 import { isActive } from '../components/BookingCard'
@@ -9,6 +9,7 @@ import { getNotifyPref, LEAD_MINUTES, setNotifyPref, syncArrivalNotifications } 
 import { addDays, c, dayKey, f, fmtTime, MONTHS, monthGrid, s, WEEKDAYS_SHORT } from '../theme'
 import { useLoad } from '../useLoad'
 import { useLayout } from '../ui'
+import { dayInfo, DEFAULT_SCHEDULE } from '../schedule'
 
 // A foglalások élőben változhatnak (weboldalas foglalás): 2 percenként csendes frissítés
 const REFRESH_MS = 2 * 60_000
@@ -17,14 +18,13 @@ export function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const { data, error, refreshing, reload, mutate, refreshIfOlder } = useLoad(getBookings, onUnauthorized, REFRESH_MS)
   const { gutter, desktop, width } = useLayout()
   const twoCol = width >= 900
-  const [closedDays, setClosedDays] = useState(DEFAULT_CLOSED_DAYS)
   const [now, setNow] = useState(() => Date.now())
   const today = dayKey(new Date(now))
   const [cursor, setCursor] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) - 1 }))
   const [openDay, setOpenDay] = useState<string | null>(null)
   const [notifyOn, setNotifyOn] = useState(false)
 
-  useEffect(() => { getClosedDays().then(setClosedDays); getNotifyPref().then(setNotifyOn) }, [])
+  useEffect(() => { getNotifyPref().then(setNotifyOn) }, [])
 
   // Óra a visszaszámláláshoz + automatikus frissítés, és frissítés, amikor az app előtérbe kerül
   useEffect(() => {
@@ -43,9 +43,14 @@ export function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   }, [mutate, reload])
   const onBlockAdded = useCallback((block: Block) => { mutate((d) => ({ ...d, blocks: [...d.blocks, block] })) }, [mutate])
   const onBlockRemoved = useCallback((id: string) => { mutate((d) => ({ ...d, blocks: d.blocks.filter((x) => x.id !== id) })) }, [mutate])
+  const onOpeningSaved = useCallback((o: Opening) => { mutate((d) => ({ ...d, openings: [...(d.openings ?? []).filter((x) => x.date !== o.date), o] })) }, [mutate])
+  const onOpeningRemoved = useCallback((id: string) => { mutate((d) => ({ ...d, openings: (d.openings ?? []).filter((x) => x.id !== id) })) }, [mutate])
 
   const bookings = data?.bookings ?? []
   const blocks = data?.blocks ?? []
+  const schedule = data?.schedule ?? DEFAULT_SCHEDULE
+  const openings = data?.openings ?? []
+  const infoOf = useCallback((day: string) => dayInfo(day, schedule, openings), [schedule, openings])
 
   const byDay = useMemo(() => {
     const map = new Map<string, Booking[]>()
@@ -124,7 +129,7 @@ export function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
             {grid.map((day, i) => day === null ? <View key={`e${i}`} style={{ width: `${100 / 7}%`, aspectRatio: twoCol ? 1.2 : 0.9 }} /> : (
               <DayCell key={day} day={day} today={today} ratio={twoCol ? 1.2 : 0.9} count={(byDay.get(day) ?? []).filter(isActive).length}
                 blocked={fullDayBlocked(day)} partial={!fullDayBlocked(day) && blocksOn(day).length > 0}
-                closed={closedDays.includes(day.slice(5))} onPress={() => setOpenDay(day)} />
+                closed={(() => { const i = infoOf(day); return !!i.ruleClosed && !i.opening })()} onPress={() => setOpenDay(day)} />
             ))}
           </View>
 
@@ -141,7 +146,8 @@ export function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
 
       <DaySheet day={openDay} today={today} now={now}
         bookings={openDay ? byDay.get(openDay) ?? [] : []} blocks={openDay ? blocksOn(openDay) : []}
-        fullDayBlocked={openDay ? fullDayBlocked(openDay) : false} closed={openDay ? closedDays.includes(openDay.slice(5)) : false}
+        fullDayBlocked={openDay ? fullDayBlocked(openDay) : false} info={openDay ? infoOf(openDay) : null}
+        onOpeningSaved={onOpeningSaved} onOpeningRemoved={onOpeningRemoved}
         onClose={() => setOpenDay(null)} onBookingUpdated={onBookingUpdated} onBlockAdded={onBlockAdded} onBlockRemoved={onBlockRemoved} />
     </View>
   )

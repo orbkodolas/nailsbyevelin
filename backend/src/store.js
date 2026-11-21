@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
-const emptyState = () => ({ bookings: [], reminders: [], payments: [], vouchers: [], blocks: [], devices: [], pairings: [] })
+const emptyState = () => ({ bookings: [], reminders: [], payments: [], vouchers: [], blocks: [], openings: [], devices: [], pairings: [] })
 
 export function createStore(filePath) {
   let queue = Promise.resolve()

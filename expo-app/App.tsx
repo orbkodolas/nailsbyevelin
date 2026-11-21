@@ -20,6 +20,7 @@ import { Revenue } from './src/screens/Revenue'
 import { c, dayKey, f, fmtDayLong, s } from './src/theme'
 import { DialogLayer, IconButton, confirm, useLayout } from './src/ui'
 import { ToastLayer } from './src/toast'
+import { TabBar } from './src/components/TabBar'
 
 const tabs = [
   { key: 'calendar', label: 'Naptár', icon: CalendarDays, Screen: Dashboard },
@@ -28,9 +29,15 @@ const tabs = [
   { key: 'devices', label: 'Eszközök', icon: ShieldCheck, Screen: Devices },
 ] as const
 
-function greeting() {
-  const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Budapest', hour: '2-digit', hourCycle: 'h23' }).format(new Date()))
-  return h < 10 ? 'Jó reggelt' : h < 18 ? 'Szia' : 'Jó estét'
+const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Budapest', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+/** Budapesti idő szerint; a név a két rész közé kerül. [előtte, utána] */
+function greeting(now: Date): [string, string] {
+  const [h, m] = timeFmt.format(now).split(':').map(Number)
+  const t = (h % 24) * 60 + m
+  if (t < 4 * 60) return ['Szia ', ', hajnali ellenőrzés?']
+  if (t < 8 * 60 + 30) return ['Jó reggelt, ', '']
+  if (t < 19 * 60) return ['Szia ', '']
+  return ['Jó estét, ', '']
 }
 
 export default function App() {
@@ -40,12 +47,15 @@ export default function App() {
   // A már megnyitott fülek életben maradnak (elrejtve): váltáskor nincs újratöltés és újraszámolás
   const [visited, setVisited] = useState<string[]>(['calendar'])
   useEffect(() => { setVisited((v) => (v.includes(tab) ? v : [...v, tab])) }, [tab])
+  const [now, setNow] = useState(() => new Date())
 
   // Megnyitáskor / előtérbe hozáskor felkeltjük a szervert
   useEffect(() => {
     wakeServer()
-    const sub = AppState.addEventListener('change', (state) => { if (state === 'active') wakeServer() })
-    return () => sub.remove()
+    const sub = AppState.addEventListener('change', (state) => { if (state === 'active') { wakeServer(); setNow(new Date()) } })
+    // A köszönés és a dátum percenként frissül (pl. éjfélkor új nap)
+    const timer = setInterval(() => setNow(new Date()), 60_000)
+    return () => { sub.remove(); clearInterval(timer) }
   }, [])
 
   useEffect(() => {
@@ -68,8 +78,8 @@ export default function App() {
   const header = (
     <View style={[s.row, { justifyContent: 'space-between', flexWrap: 'nowrap', paddingHorizontal: gutter, paddingTop: desktop ? 28 : 10, paddingBottom: 6, width: '100%', maxWidth: 1240, alignSelf: 'center' }]}>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={s.eyebrow}>{tab === 'calendar' ? fmtDayLong(dayKey(new Date())) : 'Nails by Evelin'}</Text>
-        <Text style={[s.h1, desktop && { fontSize: 40, lineHeight: 46 }]}>{tab === 'calendar' ? <>{greeting()}, <Text style={{ fontFamily: f.serifItalic, color: c.rose }}>Evelin</Text></> : current.label}</Text>
+        <Text style={s.eyebrow}>{tab === 'calendar' ? fmtDayLong(dayKey(now)) : 'Nails by Evelin'}</Text>
+        <Text style={[s.h1, desktop && { fontSize: 40, lineHeight: 46 }]}>{tab === 'calendar' ? <>{greeting(now)[0]}<Text style={{ fontFamily: f.serifItalic, color: c.rose }}>Evelin</Text>{greeting(now)[1]}</> : current.label}</Text>
       </View>
       {!desktop && !usingBuiltInKey() && <IconButton icon={LogOut} label="Kilépés" color={c.muted} onPress={askLogout} />}
     </View>
@@ -122,19 +132,7 @@ export default function App() {
           <>
             {header}
             {screen}
-            <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: c.line, backgroundColor: c.card, paddingTop: 6, paddingBottom: 4 }}>
-              {tabs.map((t) => {
-                const on = t.key === tab
-                return (
-                  <Pressable key={t.key} onPress={() => setTab(t.key)} style={{ flex: 1, maxWidth: 240, alignItems: 'center', gap: 3, paddingVertical: 6, marginHorizontal: 'auto' }}>
-                    <View style={{ paddingHorizontal: 18, paddingVertical: 4, borderRadius: 14, backgroundColor: on ? c.roseSoft : 'transparent' }}>
-                      <t.icon size={21} color={on ? c.rose : c.muted} strokeWidth={on ? 2 : 1.6} />
-                    </View>
-                    <Text style={{ color: on ? c.rose : c.muted, fontSize: 12, fontFamily: on ? f.semibold : f.sans }}>{t.label}</Text>
-                  </Pressable>
-                )
-              })}
-            </View>
+            <TabBar tabs={tabs} active={tab} onSelect={(k) => setTab(k as typeof tab)} />
           </>
         ))}
       </SafeAreaView>
