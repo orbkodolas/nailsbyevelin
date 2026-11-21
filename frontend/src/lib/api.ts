@@ -52,9 +52,11 @@ export type LiveChat = {
 export type LiveStart = { name: string; email: string; message: string; website: string }
 
 const liveAuth = (token: string) => ({ 'x-chat-token': token })
+// A szerver csak létrehozáskor küldi vissza a tokent; a további válaszokhoz a kliens őrzi meg.
+const withLiveToken = (token: string) => (view: Omit<LiveChat, 'token'>): LiveChat => ({ ...view, token })
 export const startLiveChat = (payload: LiveStart) => request<LiveChat>('/api/chat', { method: 'POST', body: payload })
 export const getLiveChat = (id: string, token: string, after = 0, wait = false, signal?: AbortSignal) =>
-  request<LiveChat>(`/api/chat/${id}?after=${after}${wait ? '&wait=1' : ''}`, { headers: liveAuth(token), signal })
+  request<LiveChat>(`/api/chat/${id}?after=${after}${wait ? '&wait=1' : ''}`, { headers: liveAuth(token), signal }).then(withLiveToken(token))
 export const sendLiveMessage = (id: string, token: string, text: string) =>
-  request<LiveChat>(`/api/chat/${id}/messages`, { method: 'POST', body: { text }, headers: liveAuth(token) })
-export const closeLiveChat = (id: string, token: string) => request<LiveChat>(`/api/chat/${id}/close`, { method: 'POST', headers: liveAuth(token) })
+  request<LiveChat>(`/api/chat/${id}/messages`, { method: 'POST', body: { text }, headers: liveAuth(token) }).then(withLiveToken(token))
+export const closeLiveChat = (id: string, token: string) => request<LiveChat>(`/api/chat/${id}/close`, { method: 'POST', headers: liveAuth(token) }).then(withLiveToken(token))
