@@ -29,11 +29,11 @@ export function Button({ label, onPress, ghost, danger, busy, icon: Icon, small 
   )
 }
 
-export function IconButton({ icon: Icon, onPress, label, color = c.text, tint }: { icon: IconType; onPress: () => void; label: string; color?: string; tint?: string }) {
+export function IconButton({ icon: Icon, onPress, label, color = c.text, tint, size = 40, outline }: { icon: IconType; onPress: () => void; label: string; color?: string; tint?: string; size?: number; outline?: string }) {
   return (
     <Pressable onPress={onPress} accessibilityLabel={label} hitSlop={6}
-      style={({ pressed }) => [{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: tint ?? c.raised, borderWidth: 1, borderColor: c.line }, pressed && { opacity: 0.6 }]}>
-      <Icon size={18} color={color} strokeWidth={1.8} />
+      style={({ pressed }) => [{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: tint ?? c.raised, borderWidth: 1, borderColor: outline ?? c.line }, pressed && { opacity: 0.6 }]}>
+      <Icon size={size < 40 ? 16 : 18} color={color} strokeWidth={1.8} />
     </Pressable>
   )
 }

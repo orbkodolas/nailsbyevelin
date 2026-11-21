@@ -92,8 +92,15 @@ export function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const pending = bookings.filter((b) => b.status === 'pending_payment').length
 
   const grid = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor])
-  const shift = (delta: number) => setCursor(({ year, month }) => { const d = new Date(Date.UTC(year, month + delta, 1)); return { year: d.getUTCFullYear(), month: d.getUTCMonth() } })
-  const isThisMonth = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}` === today.slice(0, 7)
+  const cursorKey = `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}`
+  const isThisMonth = cursorKey === today.slice(0, 7)
+  // Visszafelé nem lapozunk: a mai hónapnál korábbi nézet nem érhető el
+  const canGoBack = cursorKey > today.slice(0, 7)
+  const shift = (delta: number) => setCursor(({ year, month }) => {
+    const d = new Date(Date.UTC(year, month + delta, 1))
+    const next = { year: d.getUTCFullYear(), month: d.getUTCMonth() }
+    return delta < 0 && `${next.year}-${String(next.month + 1).padStart(2, '0')}` < today.slice(0, 7) ? { year, month } : next
+  })
 
   return (
     <View style={s.screen}>
@@ -114,7 +121,7 @@ export function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
 
         <View style={[s.card, { padding: twoCol ? 20 : 14, gap: 10 }, twoCol && { flex: 1 }]}>
           <View style={[s.row, { justifyContent: 'space-between', flexWrap: 'nowrap' }]}>
-            <NavButton dir="prev" onPress={() => shift(-1)} />
+            {canGoBack ? <NavButton dir="prev" onPress={() => shift(-1)} /> : <View style={{ width: 40, height: 40 }} />}
             <Pressable onPress={() => setCursor({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) - 1 })} style={{ alignItems: 'center' }}>
               <Text style={[s.h2, { fontSize: 22 }]}>{cursor.year}. {MONTHS[cursor.month]}</Text>
               {!isThisMonth && <Text style={[s.small, { color: c.rose }]}>Vissza a mai naphoz</Text>}

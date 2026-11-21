@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ActivityIndicator, Linking, Pressable, ScrollView, type ScrollViewInstance, Text, TextInput, View } from 'react-native'
 import { Bell, BellOff, ChevronLeft, Mail, Send, Settings, Trash2 } from 'lucide-react-native'
 import { chatAction, chatReply, deleteChat, errorText, setChatSettings, type Chat as ChatData, type ChatMessage, type ChatSettings, type ChatStatus } from '../api'
@@ -36,8 +36,8 @@ function Countdown({ deadline, offset, size = 13 }: { deadline: string; offset: 
   return <Text style={{ color: c.rose, fontFamily: f.semibold, fontSize: size }}>{`${pad(Math.floor(left / 60))}:${pad(left % 60)}`}</Text>
 }
 
-/** Elérhetőség-kapcsoló és foglaltság (a Naptár értesítés-kapcsolójának stílusában). */
-function Availability({ settings }: { settings: ChatSettings }) {
+/** Elérhetőség-kapcsoló és foglaltság. Kompakt módban egy kis harang gomb + rövid felirat (a trailing a sor jobb szélére kerül). */
+function Availability({ settings, compact, trailing }: { settings: ChatSettings; compact?: boolean; trailing?: ReactNode }) {
   const [busy, setBusy] = useState(false)
   const push = usePushStatus()
   const on = settings.available
@@ -50,18 +50,8 @@ function Availability({ settings }: { settings: ChatSettings }) {
     finally { setBusy(false) }
   }
 
-  return (
-    <View style={[s.card, { gap: 8 }]}>
-      <Pressable onPress={() => run({ available: !on })} disabled={busy} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12 }, pressed && { opacity: 0.7 }]}>
-        {on ? <Bell size={20} color={c.rose} strokeWidth={1.8} /> : <BellOff size={20} color={c.muted} strokeWidth={1.8} />}
-        <View style={{ flex: 1 }}>
-          <Text style={s.title}>Elérhető vagyok chatre</Text>
-          <Text style={s.small}>{on ? 'A látogatók kérdezhetnek az oldalon.' : 'Most nem fogadsz új kérdést.'}</Text>
-        </View>
-        <View style={{ width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: on ? c.rose : c.berry, alignItems: on ? 'flex-end' : 'flex-start' }}>
-          <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: on ? c.bg : c.muted }} />
-        </View>
-      </Pressable>
+  const extras = (
+    <>
       {push.state === 'denied' && (
         <View style={{ gap: 6 }}>
           <Text style={[s.small, { color: c.gold }]}>Az Android nem engedélyezte az értesítéseket.</Text>
@@ -81,6 +71,41 @@ function Availability({ settings }: { settings: ChatSettings }) {
           <Button label="Feloldás" ghost small onPress={() => run({ clearBusy: true })} />
         </View>
       )}
+    </>
+  )
+
+  if (compact) {
+    const toggle = () => { if (!busy) void run({ available: !on }) }
+    return (
+      <View style={{ gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1, opacity: busy ? 0.6 : 1 }}>
+            <IconButton icon={on ? Bell : BellOff} label={on ? 'Értesítés kikapcsolása' : 'Értesítés bekapcsolása'} onPress={toggle} size={36}
+              color={on ? c.rose : c.muted} tint={on ? c.roseSoft : undefined} outline={on ? c.rose : undefined} />
+            <Pressable onPress={toggle} hitSlop={6} style={{ flexShrink: 1 }}>
+              <Text style={[s.small, { fontSize: 13, color: on ? c.text : c.muted }]} numberOfLines={1}>Értesíts, ha keresnek</Text>
+            </Pressable>
+          </View>
+          {trailing}
+        </View>
+        {extras}
+      </View>
+    )
+  }
+
+  return (
+    <View style={[s.card, { gap: 8 }]}>
+      <Pressable onPress={() => run({ available: !on })} disabled={busy} style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: 12 }, pressed && { opacity: 0.7 }]}>
+        {on ? <Bell size={20} color={c.rose} strokeWidth={1.8} /> : <BellOff size={20} color={c.muted} strokeWidth={1.8} />}
+        <View style={{ flex: 1 }}>
+          <Text style={s.title}>Elérhető vagyok chatre</Text>
+          <Text style={s.small}>{on ? 'A látogatók kérdezhetnek az oldalon.' : 'Most nem fogadsz új kérdést.'}</Text>
+        </View>
+        <View style={{ width: 44, height: 26, borderRadius: 13, padding: 3, backgroundColor: on ? c.rose : c.berry, alignItems: on ? 'flex-end' : 'flex-start' }}>
+          <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: on ? c.bg : c.muted }} />
+        </View>
+      </Pressable>
+      {extras}
     </View>
   )
 }
@@ -216,11 +241,14 @@ function Thread({ chat, offset }: { chat: ChatData; offset: number }) {
       )}
 
       {canReply && (
-        <View style={[s.row, { flexWrap: 'nowrap', alignItems: 'flex-end', paddingBottom: 8 }]}>
-          <TextInput value={text} onChangeText={setText} multiline maxLength={1000} placeholder="Írj választ…" placeholderTextColor={c.faint}
-            style={[s.input, { flex: 1, maxHeight: 120, paddingVertical: 10 }]} />
-          <View style={{ opacity: sending || !text.trim() ? 0.5 : 1 }}>
-            <IconButton icon={Send} label="Küldés" onPress={send} color={c.bg} tint={c.rose} />
+        <View style={{ paddingBottom: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', borderWidth: 1, borderColor: c.line, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.03)' }}>
+            <TextInput value={text} onChangeText={setText} multiline maxLength={1000} placeholder="Írj választ…" placeholderTextColor={c.faint}
+              style={[s.input, { flex: 1, minHeight: 42, maxHeight: 120, borderWidth: 0, backgroundColor: 'transparent', paddingVertical: 10, paddingLeft: 16, paddingRight: 6 }]} />
+            <Pressable onPress={send} disabled={sending || !text.trim()} accessibilityLabel="Küldés" hitSlop={6}
+              style={({ pressed }) => [{ width: 34, height: 34, borderRadius: 17, margin: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: c.rose, opacity: sending || !text.trim() ? 0.45 : pressed ? 0.7 : 1 }]}>
+              {sending ? <ActivityIndicator size="small" color={c.bg} /> : <Send size={16} color={c.bg} strokeWidth={1.9} />}
+            </Pressable>
           </View>
         </View>
       )}
@@ -275,10 +303,7 @@ export function Chat({ onUnauthorized }: { onUnauthorized: () => void }) {
     <View style={box}>
       <ScrollView contentContainerStyle={{ gap: 12, paddingTop: 10, paddingBottom: 24 }}>
         {list && (
-          <View style={[s.row, { flexWrap: 'nowrap' }]}>
-            <View style={{ flex: 1 }}><Availability settings={list.settings} /></View>
-            <IconButton icon={Settings} label="Beállítások" onPress={() => setInSettings(true)} />
-          </View>
+          <Availability compact settings={list.settings} trailing={<IconButton icon={Settings} label="Beállítások" onPress={() => setInSettings(true)} size={36} />} />
         )}
         {error && <Text style={[s.small, { color: c.danger }]}>{error}</Text>}
         {!list && !error && <ActivityIndicator color={c.rose} style={{ marginTop: 40 }} />}
