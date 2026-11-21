@@ -68,13 +68,28 @@ export function createLiveChat({ store, config, now, log, notifier, fcm, backgro
   }
 
   // ---------- beállítások (Evelin elérhetősége) ----------
-  const readSettings = () => store.read((state) => ({ available: true, busyUntil: null, ...(state.settings ?? []).find((item) => item.id === 'chat') }))
+  const readSettings = () => store.read((state) => ({ available: true, busyUntil: null, quietOverrideUntil: null, ...(state.settings ?? []).find((item) => item.id === 'chat') }))
+  // Csendes órák (alap 22–8): ilyenkor Evelin alapból nem elérhető, de a kapcsolóval felülbírálhatja
+  // a csendes időszak végéig (quietOverrideUntil)
+  const isQuiet = () => {
+    const [from, to] = config.chatQuietHours
+    const hour = localHour(now(), config.timezone)
+    return from !== to && (from > to ? hour >= from || hour < to : hour >= from && hour < to)
+  }
+  const quietEnd = () => {
+    const to = config.chatQuietHours[1]
+    const start = Math.floor(nowMs() / HOUR) * HOUR
+    for (let i = 1; i <= 25; i++) { const t = start + i * HOUR; if (localHour(new Date(t), config.timezone) === to) return new Date(t).toISOString() }
+    return new Date(nowMs() + 12 * HOUR).toISOString()
+  }
+  const overrideActive = (current) => Boolean(current.quietOverrideUntil && current.quietOverrideUntil > iso())
+  const effectiveAvailable = (current) => current.available && (!isQuiet() || overrideActive(current))
   const writeSettings = (patch) => store.update((state) => {
     state.settings ??= []
     let item = state.settings.find((entry) => entry.id === 'chat')
     if (!item) { item = { id: 'chat', available: true, busyUntil: null }; state.settings.push(item) }
     Object.assign(item, patch)
-    return { available: item.available, busyUntil: item.busyUntil }
+    return { available: item.available, busyUntil: item.busyUntil, quietOverrideUntil: item.quietOverrideUntil ?? null }
   })
 
   // ---------- push ----------
@@ -147,9 +162,7 @@ export function createLiveChat({ store, config, now, log, notifier, fcm, backgro
     const current = await readSettings()
     if (!current.available) return 'offline'
     if (current.busyUntil && current.busyUntil > iso()) return 'busy'
-    const [from, to] = config.chatQuietHours
-    const hour = localHour(now(), config.timezone)
-    if (from !== to && (from > to ? hour >= from || hour < to : hour >= from && hour < to)) return 'quiet'
+    if (isQuiet() && !overrideActive(current)) return 'quiet'
     const t = nowMs()
     const withGuest = await store.read((state) => state.bookings.some((item) => item.status === 'booked' && Date.parse(item.startsAt) <= t && t < Date.parse(item.endsAt)))
     return withGuest ? 'with_guest' : null
@@ -188,7 +201,7 @@ export function createLiveChat({ store, config, now, log, notifier, fcm, backgro
   async function adminList() {
     const list = [...chats.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 100).map(adminView)
     const current = await readSettings()
-    return { version, serverNow: iso(), settings: { available: current.available, busyUntil: current.busyUntil && current.busyUntil > iso() ? current.busyUntil : null }, chats: list }
+    return { version, serverNow: iso(), settings: { available: effectiveAvailable(current), quiet: isQuiet(), busyUntil: current.busyUntil && current.busyUntil > iso() ? current.busyUntil : null }, chats: list }
   }
 
   const markRead = (chat) => { chat.readAt = iso(); chat.readCount = chat.messages.length }
@@ -291,7 +304,11 @@ export function createLiveChat({ store, config, now, log, notifier, fcm, backgro
     if (req.method === 'POST' && path === '/api/admin/chat-settings') {
       const body = await readBody(req)
       const patch = {}
-      if (typeof body.available === 'boolean') patch.available = body.available
+      if (typeof body.available === 'boolean') {
+        // Csendes órákban a kapcsoló a felülbírálást kezeli; a nappali beállítás változatlan marad
+        if (isQuiet()) { patch.quietOverrideUntil = body.available ? quietEnd() : null; if (body.available) patch.available = true }
+        else { patch.available = body.available; patch.quietOverrideUntil = null }
+      }
       if (body.clearBusy) patch.busyUntil = null
       await writeSettings(patch)
       version++

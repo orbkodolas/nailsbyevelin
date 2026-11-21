@@ -128,7 +128,8 @@ export function ChatBot() {
   // Hosszú lekérdezés: a szerver az új üzenetig (legfeljebb ~20 mp) tartja nyitva a kérést
   const liveId = chat?.id
   const liveToken = chat?.token
-  const polling = isActive(chat)
+  // „Nem elérhető” állapotban is figyelünk, amíg a panel nyitva van: Evelin ilyenkor is válaszolhat élőben
+  const polling = isActive(chat) || (open && chat?.status === 'missed')
   useEffect(() => {
     if (!liveId || !liveToken || !polling) return
     let stop = false

@@ -106,6 +106,17 @@ test('chat: elutasítás, kikapcsolt elérhetőség, csendes órák, nincs eszk�
     await call('POST', '/api/admin/chat-settings', { available: true }, admin)
     clock.current = new Date('2026-11-23T22:30:00.000Z') // 23:30 helyi idő
     assert.equal((await start(call)).body.reason, 'quiet')
+    // Csendes órákban a kapcsoló kikapcsoltnak látszik; bekapcsolva felülírja a csendes módot reggelig
+    assert.equal((await call('GET', '/api/admin/chats', undefined, admin)).body.settings.available, false)
+    const on = await call('POST', '/api/admin/chat-settings', { available: true }, admin)
+    assert.equal(on.body.available, true)
+    const live = await start(call)
+    assert.equal(live.body.status, 'waiting')
+    await call('POST', `/api/admin/chats/${live.body.id}/decline`, {}, admin)
+    await call('POST', '/api/admin/chat-settings', { clearBusy: true, available: false }, admin)
+    assert.equal((await start(call)).body.reason, 'quiet')
+    clock.current = new Date('2026-11-24T09:00:00.000Z') // nappal: a nappali beállítás (bekapcsolva) érvényes
+    assert.equal((await call('GET', '/api/admin/chats', undefined, admin)).body.settings.available, true)
   })
   await withApi({ fcm: null, registerToken: true }, async ({ call }) => {
     assert.equal((await start(call)).body.reason, 'no_device')
