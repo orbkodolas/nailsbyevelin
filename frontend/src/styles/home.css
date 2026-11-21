@@ -32,7 +32,7 @@ section { position: relative; }
   .hero-inner { grid-template-columns: 1.1fr 0.9fr; gap: 6vw; }
   .hero-visual { justify-self: end; width: min(100%, 460px); }
   .hero-facts { max-width: 720px; }
-  .scroll-cue { position: absolute; right: var(--gutter); bottom: var(--space-6); display: flex; align-items: center; gap: var(--space-3); font-size: 0.66rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); writing-mode: vertical-rl; }
+  .scroll-cue { position: absolute; right: var(--gutter); bottom: 116px; display: flex; align-items: center; gap: var(--space-3); font-size: 0.66rem; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); writing-mode: vertical-rl; }
   .scroll-cue i { width: 1px; height: 48px; background: var(--rose-deep); transform-origin: top; }
 }
 

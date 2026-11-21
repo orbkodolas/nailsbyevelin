@@ -16,6 +16,7 @@ import { Rules } from './components/Rules'
 import { Voucher } from './components/Voucher'
 import { Booking } from './components/Booking'
 import { Footer } from './components/Footer'
+import { ChatBot } from './components/ChatBot'
 import { ManageBooking } from './pages/ManageBooking'
 import { VoucherThanks } from './pages/VoucherThanks'
 
@@ -89,6 +90,7 @@ export default function App() {
     <>
       <Home />
       <BookingModal />
+      <ChatBot />
       <Modal open={isOverlay} onClose={closeRoute} title={overlay?.name === 'voucher-thanks' ? 'Ajándékutalvány' : 'A foglalásod'}>
         {overlay?.name === 'manage' && <ManageBooking id={overlay.id} token={overlay.token} query={overlay.query} />}
         {overlay?.name === 'voucher-thanks' && <VoucherThanks />}
