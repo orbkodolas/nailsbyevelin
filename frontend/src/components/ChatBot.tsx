@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowUp, Sparkles, X } from 'lucide-react'
-import { answer, chipLabels, detectIntent, welcome, type BotSettings, type ChatAction, type IntentId, type Reply } from '../lib/chatbot'
+import { answer, chipLabels, detectIntent, startChips, welcome, type BotSettings, type ChatAction, type IntentId, type Reply } from '../lib/chatbot'
 import { ApiError, closeLiveChat, getLiveChat, getSettings, sendLiveMessage, startLiveChat, type LiveChat, type LiveMessage, type LiveStatus } from '../lib/api'
 import { openBooking } from '../lib/bookingModal'
 import { getLenis, scrollToTarget } from '../lib/motion'
@@ -81,6 +81,7 @@ export function ChatBot() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>(loadMessages)
   const [typing, setTyping] = useState(0)
+  const [mainMenu, setMainMenu] = useState(false)
   const [text, setText] = useState('')
   const [chat, setChat] = useState<LiveState | null>(loadLive)
   const [mode, setMode] = useState<Mode>(() => (chat ? 'live' : 'bot'))
@@ -204,6 +205,7 @@ export function ChatBot() {
   const ask = useCallback((question: string, intent?: IntentId) => {
     const q = question.trim()
     if (!q) return
+    setMainMenu(false)
     const id = intent ?? detectIntent(q)
     const reply = answer(id, settings.current)
     const userId = nextId.current++
@@ -287,7 +289,8 @@ export function ChatBot() {
 
   const live = mode === 'live' ? chat : null
   const last = messages[messages.length - 1]
-  const chips = !typing && last?.from === 'bot' ? last.reply?.chips ?? [] : []
+  const chips = mainMenu ? startChips : !typing && last?.from === 'bot' ? last.reply?.chips ?? [] : []
+  const atMainMenu = startChips.length === chips.length && startChips.every((id) => chips.includes(id))
 
   return (
     <>
@@ -405,8 +408,11 @@ export function ChatBot() {
               ) : (
                 <>
                   <button type="button" className="chat-live-link" onClick={openLive}>Élő chat Evelinnel</button>
-                  {chips.length > 0 && (
-                    <div className="chat-chips">
+                  {(chips.length > 0 || !atMainMenu) && (
+                    <div className="chat-chips" aria-label="Választható témák">
+                      {!atMainMenu && (
+                        <button type="button" className="chat-chip" aria-label="Vissza a főmenühöz" onClick={() => setMainMenu(true)}>← Főmenü</button>
+                      )}
                       {chips.map((id) => (
                         <button key={id} type="button" className="chat-chip" onClick={() => ask(chipLabels[id], id)}>{chipLabels[id]}</button>
                       ))}
