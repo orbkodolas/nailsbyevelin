@@ -82,7 +82,6 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
   const info = STATUS[booking.status] ?? { label: booking.status, tone: 'off' as const }
   const active = booking.status === 'booked'
   const hoursLeft = (Date.parse(booking.startsAt) - Date.now()) / 3_600_000
-  const confirmed = booking.confirmationStatus === 'confirmed'
 
   if (step === 'pick') {
     return (
@@ -121,8 +120,8 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
 
   return (
     <div className="manage">
-      <h3 className="manage-title">{booking.firstName}, <em>{active && confirmed ? 'várlak!' : 'az időpontod'}</em></h3>
-        <p className={`pill pill-${info.tone}`}>{active && confirmed ? 'Megerősítve' : info.label}</p>
+      <h3 className="manage-title">{booking.firstName}, <em>{active ? 'várlak!' : 'az időpontod'}</em></h3>
+        <p className={`pill pill-${info.tone}`}>{info.label}</p>
         <dl className="status-list">
           <div><dt>Szolgáltatás</dt><dd>{booking.serviceName}</dd></div>
           <div><dt>Időpont</dt><dd>{formatWhen(booking.startsAt)}</dd></div>
@@ -139,11 +138,7 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
             {payment?.instructions && <p className="notice">{payment.instructions}</p>}
           </div>
         )}
-        {active && !confirmed && (
-          <div className="status-actions"><p>Kérlek, erősítsd meg, hogy tudsz jönni. Így tudom, hogy számíthatok rád.</p>
-            <button className="btn btn-primary" type="button" disabled={busy} onClick={() => run(() => bookingAction(id, token, 'confirm'))}><span>Megerősítem</span></button></div>
-        )}
-        {active && confirmed && <p className="hint">Köszönöm! Pontosan érkezz, kísérő nélkül. Egy szett legalább 2 órát vesz igénybe.</p>}
+        {active && <p className="hint">Köszönöm! Pontosan érkezz, kísérő nélkül. Egy szett legalább 2 órát vesz igénybe.</p>}
         {booking.status === 'expired' && <p className="notice">A fizetés nem érkezett meg időben, ezért ez az időpont nem jött létre. <a href="#/">Foglalj újat</a>.</p>}
         {booking.status === 'cancelled' && <p className="hint">Köszönöm, hogy szóltál. {booking.lateCancellation ? 'Szívesen látlak máskor is.' : ''}</p>}
 

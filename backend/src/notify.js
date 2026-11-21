@@ -73,12 +73,12 @@ export function createNotifier({ config, fetchImpl, log = console }) {
       const text = [
         `Szia ${first}!`, '', 'Az időpontod rögzítve van.', '',
         `${booking.serviceName}`, when(booking), '',
-        'Itt tudod megerősíteni, módosítani vagy lemondani (egy üzenet is elég, ha nem tudsz jönni):', manageUrl(booking), '', note, signoff,
+        'Itt tudod módosítani vagy lemondani az időpontot (egy üzenet is elég, ha nem tudsz jönni):', manageUrl(booking), '', note, signoff,
       ].join('\n')
       const html = renderMail({
         publicUrl: config.publicUrl, cover: true, gallery: true, preheader: `${booking.serviceName} – ${when(booking)}`,
         title: 'Az időpontod rögzítve van',
-        paragraphs: [`Szia ${first}!`, 'Köszönöm a foglalást, már várlak. Megerősíteni, módosítani vagy lemondani az alábbi gombbal tudod (egy üzenet is elég, ha nem tudsz jönni).'],
+        paragraphs: [`Szia ${first}!`, 'Köszönöm a foglalást, már várlak. Az időpontot az alábbi gombbal tudod módosítani vagy lemondani (egy üzenet is elég, ha nem tudsz jönni).'],
         details: [['Szolgáltatás', booking.serviceName], ['Időpont', when(booking)], ...(paid ? [['Kifizetve', paid]] : [])],
         button: { label: 'Időpont kezelése', url: manageUrl(booking) }, footnote: note,
       })
@@ -91,7 +91,7 @@ export function createNotifier({ config, fetchImpl, log = console }) {
       const text = [
         `Szia ${first}!`, '', 'Az időpontodat módosítottad, az új időpont rögzítve van.', '',
         `${booking.serviceName}`, `Új időpont: ${when(booking)}`, `Korábbi időpont (felszabadult): ${before}`, '',
-        'Itt tudod megerősíteni, módosítani vagy lemondani:', manageUrl(booking), '', signoff,
+        'Itt tudod módosítani vagy lemondani az időpontot:', manageUrl(booking), '', signoff,
       ].join('\n')
       const html = renderMail({
         publicUrl: config.publicUrl, preheader: `Új időpont: ${when(booking)}`,
@@ -108,7 +108,7 @@ export function createNotifier({ config, fetchImpl, log = console }) {
       const first = booking.name.split(' ')[0]
       const lead = early ? `Holnapra szól az időpontod: ${when(booking)}.` : `Hamarosan várlak: ${when(booking)}.`
       const ask = early
-        ? (booking.confirmationStatus === 'confirmed' ? 'Ha mégsem tudsz jönni, kérlek, mondd le minél előbb, így másnak tovább tudom adni az időt.' : 'Kérlek, erősítsd meg, hogy jössz, vagy mondd le, ha nem tudsz. Így másnak tovább tudom adni az időt.')
+        ? 'Ha mégsem tudsz jönni, kérlek, módosítsd vagy mondd le minél előbb, így másnak tovább tudom adni az időt.'
         : 'Ha mégsem tudsz eljönni, kérlek, szólj még most.'
       const text = [`Szia ${first}!`, '', lead, '', ask, manageUrl(booking), signoff].join('\n')
       const html = renderMail({
@@ -116,9 +116,9 @@ export function createNotifier({ config, fetchImpl, log = console }) {
         title: early ? 'Holnapi időpontod' : 'Ma várlak!',
         paragraphs: [`Szia ${first}!`, lead, ask],
         details: [['Szolgáltatás', booking.serviceName], ['Időpont', when(booking)]],
-        button: { label: early && booking.confirmationStatus !== 'confirmed' ? 'Megerősítem / lemondom' : 'Időpont kezelése', url: manageUrl(booking) },
+        button: { label: 'Időpont kezelése', url: manageUrl(booking) },
       })
-      return sendMail({ to: booking.email, subject: early ? 'Holnapi időpontod – megerősítés' : 'Ma várlak!', text, html })
+      return sendMail({ to: booking.email, subject: early ? 'Holnapi időpontod' : 'Ma várlak!', text, html })
     },
 
     voucherMail(voucher) {
