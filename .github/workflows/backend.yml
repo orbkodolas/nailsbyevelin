@@ -1,0 +1,68 @@
+name: Backend
+on:
+  push: { branches: [main], paths: ['backend/**', 'shared/**', '.github/workflows/backend.yml'] }
+  pull_request: { paths: ['backend/**', 'shared/**', '.github/workflows/backend.yml'] }
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    concurrency: { group: "backend-test-${{ github.ref }}", cancel-in-progress: true }
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: backend/package-lock.json }
+      - run: npm ci
+      - run: npm test
+  deploy:
+    needs: test
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    concurrency: { group: backend-deploy, cancel-in-progress: false }
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+    steps:
+      - name: Render deploy indítása
+        run: |
+          set -eu
+          curl -sS -o deploy.json -w '%{http_code}' \
+            -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}' > http.code
+          test "$(cat http.code)" = "201" || test "$(cat http.code)" = "200" || { echo "Render HTTP $(cat http.code)"; exit 1; }
+          DEPLOY_ID=$(jq -r '.id // empty' deploy.json)
+          test -n "$DEPLOY_ID" || { echo "Nincs deploy id a válaszban"; exit 1; }
+          echo "DEPLOY_ID=$DEPLOY_ID" >> "$GITHUB_ENV"
+          echo "Render deploy id: $DEPLOY_ID, státusz: $(jq -r '.status // "ismeretlen"' deploy.json)"
+          rm -f deploy.json http.code
+      - name: Render deploy állapot figyelése
+        run: |
+          set -eu
+          for i in $(seq 1 48); do
+            curl -sS -o status.json \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys/$DEPLOY_ID"
+            STATUS=$(jq -r '.status // "ismeretlen"' status.json)
+            COMMIT=$(jq -r '.commit.id // "ismeretlen"' status.json)
+            echo "[$i] státusz: $STATUS (commit: ${COMMIT:0:7})"
+            case "$STATUS" in
+              live) rm -f status.json; exit 0 ;;
+              build_failed|update_failed|canceled|deactivated) rm -f status.json; echo "Deploy sikertelen: $STATUS"; exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "Időtúllépés: a deploy nem lett 'live' állapotban 12 percen belül"
+          exit 1
+      - name: Élő ellenőrzés
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS -o /dev/null https://nailsbyevelin-api.onrender.com/health; then
+              echo "Health OK"; exit 0
+            fi
+            echo "Health próba $i sikertelen, újrapróbálás..."
+            sleep 20
+          done
+          echo "Health ellenőrzés sikertelen"; exit 1
