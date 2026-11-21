@@ -64,14 +64,6 @@ export function TabBar({ tabs, active, onSelect }: { tabs: readonly Tab[]; activ
               transform: [{ translateX: Animated.subtract(x, BOX / 2) }, { scale }] }}>
             <Svg width={BOX} height={BOX}>
               <Defs>
-                <RadialGradient id="tbShadow" cx="50%" cy="50%" r="50%">
-                  <Stop offset="0.55" stopColor="#000" stopOpacity={0.55} />
-                  <Stop offset="1" stopColor="#000" stopOpacity={0} />
-                </RadialGradient>
-                <RadialGradient id="tbGlow" cx="50%" cy="50%" r="50%">
-                  <Stop offset="0.6" stopColor={c.rose} stopOpacity={0.3} />
-                  <Stop offset="1" stopColor={c.rose} stopOpacity={0} />
-                </RadialGradient>
                 <RadialGradient id="tbFill" cx="35%" cy="30%" r="75%">
                   <Stop offset="0" stopColor="#ecc3c9" />
                   <Stop offset="0.45" stopColor={c.rose} />
@@ -82,8 +74,6 @@ export function TabBar({ tabs, active, onSelect }: { tabs: readonly Tab[]; activ
                   <Stop offset="0.4" stopColor="#fff" stopOpacity={0} />
                 </LinearGradient>
               </Defs>
-              <Circle cx={BOX / 2} cy={BOX / 2} r={BOX / 2} fill="url(#tbGlow)" />
-              <Circle cx={BOX / 2} cy={BOX / 2 + 6} r={ORB / 2 + 8} fill="url(#tbShadow)" />
               <Circle cx={BOX / 2} cy={BOX / 2} r={ORB / 2} fill="url(#tbFill)" />
               <Circle cx={BOX / 2} cy={BOX / 2} r={ORB / 2 - 0.5} fill="none" stroke="url(#tbShine)" strokeWidth={1} />
             </Svg>
