@@ -34,7 +34,8 @@ async function withApi(options, run) {
     await rm(dir, { recursive: true, force: true })
   }
 }
-const start = (call, extra = {}) => call('POST', '/api/chat', { name: 'Lilla', email: 'lilla@example.com', message: 'Szia! Van szabad időpont pénteken?', ...extra })
+let seq = 0
+const start = (call, extra = {}) => call('POST', '/api/chat', { name: 'Lilla', email: `lilla${++seq}@example.com`, message: `Szia! Van szabad időpont pénteken? (${seq})`, formMs: 5000, ...extra })
 
 test('chat: értesítés megy, Evelin válaszol, élő beszélgetés indul', async () => {
   await withApi({}, async ({ call, sent, app }) => {
@@ -162,5 +163,43 @@ test('chat: érvénytelen adatok és érvénytelen push token törlése', async 
     assert.equal(created.body.reason, 'no_device')
     await app.idle()
     assert.deepEqual(await app.store.read((state) => state.pushTokens), [])
+  })
+})
+
+test('chat: védelem – e-mail-címenként egy nyitott beszélgetés, ismétlés és napi keret', async () => {
+  await withApi({}, async ({ call }) => {
+    const ask = (extra) => call('POST', '/api/chat', { name: 'Kata', email: 'kata@gmail.com', message: 'Mennyi a töltés ára?', formMs: 5000, ...extra })
+    const first = await ask()
+    assert.equal(first.body.status, 'waiting')
+    // Ugyanaz a postafiók más írásmóddal: egyszerre csak egy nyitott beszélgetés, és nem kap hozzáférést a régihez
+    const again = await ask({ email: 'K.ata+spam@googlemail.com', message: 'Más kérdés' })
+    assert.equal(again.status, 409)
+    assert.equal(again.body.error, 'chat_already_open')
+    assert.equal(again.body.token, undefined)
+    await call('POST', `/api/admin/chats/${first.body.id}/decline`, {}, admin)
+    await call('POST', '/api/admin/chat-settings', { clearBusy: true }, admin)
+    assert.equal((await ask({ message: 'mennyi a TÖLTÉS ára' })).body.error, 'duplicate_question')
+    for (const message of ['Második kérdés', 'Harmadik kérdés']) {
+      const next = await ask({ message })
+      assert.equal(next.status, 201)
+      await call('POST', `/api/admin/chats/${next.body.id}/decline`, {}, admin)
+      await call('POST', '/api/admin/chat-settings', { clearBusy: true }, admin)
+    }
+    const fourth = await ask({ message: 'Negyedik kérdés' })
+    assert.equal(fourth.status, 429)
+    assert.equal(fourth.body.error, 'too_many_questions')
+  })
+})
+
+test('chat: védelem – túl gyors kitöltés csendben elnyelve, régi oldal frissítést kér', async () => {
+  await withApi({}, async ({ call, app, sent }) => {
+    const fast = await start(call, { formMs: 300 })
+    assert.equal(fast.status, 201)
+    assert.equal((await call('GET', `/api/chat/${fast.body.id}`, undefined, { 'x-chat-token': fast.body.token })).status, 404)
+    const old = await start(call, { formMs: undefined })
+    assert.equal(old.status, 400)
+    await app.idle()
+    assert.equal(sent.length, 0)
+    assert.equal((await call('GET', '/api/admin/chats', undefined, admin)).body.chats.length, 0)
   })
 })

@@ -49,7 +49,7 @@ export type LiveChat = {
   id: string; token: string; status: LiveStatus; reason: string | null; name: string; email: string; deadline: string | null
   serverNow: string; closedBy: 'guest' | 'evelin' | 'idle' | null; seq: number; messages: LiveMessage[]
 }
-export type LiveStart = { name: string; email: string; message: string; website: string }
+export type LiveStart = { name: string; email: string; message: string; website: string; formMs: number }
 
 const liveAuth = (token: string) => ({ 'x-chat-token': token })
 // A szerver csak létrehozáskor küldi vissza a tokent; a további válaszokhoz a kliens őrzi meg.

@@ -16,6 +16,15 @@ const KEEP_DAYS = 60
 const OPEN = ['waiting', 'live']
 
 const hashHex = (value) => createHash('sha256').update(String(value)).digest('hex')
+/** Azonos postafiók felismerése: kisbetű, +címke nélkül, Gmailnél a pontok nélkül. */
+export function emailKey(email) {
+  const [local = '', domain = ''] = String(email).trim().toLowerCase().split('@')
+  const gmail = domain === 'gmail.com' || domain === 'googlemail.com'
+  const base = local.split('+')[0]
+  return `${gmail ? base.replaceAll('.', '') : base}@${gmail ? 'gmail.com' : domain}`
+}
+const sameText = (text) => text.toLowerCase().replace(/\s+/g, ' ').replace(/[^\p{L}\p{N} ]/gu, '').trim()
+const MAX_STORED = 500
 const isEmail = (value) => typeof value === 'string' && value.length <= 254 && /^[^\s@<>"'`]+@[^\s@<>"'`]+\.[^\s@<>"'`]+$/.test(value)
 const hourFmt = new Map()
 const localHour = (date, timeZone) => {
@@ -26,6 +35,7 @@ const localHour = (date, timeZone) => {
 export function createLiveChat({ store, config, now, log, notifier, fcm, background, readBody, json }) {
   const settings = { timeoutMs: config.chatTimeoutSeconds * 1000, busyMs: config.chatBusyMinutes * MINUTE, idleMs: config.chatIdleMinutes * MINUTE }
   const createLimit = createLimiter({ windowMs: HOUR, max: config.chatPerHour })
+  const createDailyLimit = createLimiter({ windowMs: 24 * HOUR, max: config.chatPerDay })
   const messageLimit = createLimiter({ windowMs: MINUTE, max: 20 })
   const chats = new Map()
   const seen = new Map() // chatId -> utolsó látogatói lekérdezés (ms)
@@ -174,10 +184,12 @@ export function createLiveChat({ store, config, now, log, notifier, fcm, backgro
     const nowIso = iso()
     const idleBefore = new Date(nowMs() - settings.idleMs).toISOString()
     const dropBefore = new Date(nowMs() - KEEP_DAYS * 24 * HOUR).toISOString()
+    // Tárhely felső korlátja: a legrégebbi lezárt beszélgetések törlődnek
+    const overflow = new Set([...chats.values()].filter((item) => !OPEN.includes(item.status)).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, Math.max(0, chats.size - MAX_STORED)))
     for (const chat of [...chats.values()]) {
       const last = chat.messages.at(-1)?.at ?? chat.createdAt
       if (chat.status === 'live' && last < idleBefore) { chat.status = 'closed'; chat.closedBy = 'idle'; chat.closedAt = nowIso; changed(chat) }
-      if (chat.createdAt < dropBefore) {
+      if (chat.createdAt < dropBefore || overflow.has(chat)) {
         chats.delete(chat.id)
         background(store.update((state) => { state.chats = (state.chats ?? []).filter((item) => item.id !== chat.id) }))
       }
@@ -212,17 +224,32 @@ export function createLiveChat({ store, config, now, log, notifier, fcm, backgro
     if (req.method === 'POST' && path === '/api/chat') {
       await ready()
       const body = await readBody(req)
-      if (body.website) return json(res, 201, { id: randomUUID(), token: randomBytes(24).toString('base64url'), status: 'missed', reason: 'offline', messages: [] }) // honeypot: csendben elnyeljük
+      // Bot-csapda: kitöltött rejtett mező vagy emberileg lehetetlenül gyors kitöltés → csendben elnyeljük
+      const decoy = () => json(res, 201, { id: randomUUID(), token: randomBytes(24).toString('base64url'), status: 'missed', reason: 'offline', messages: [] })
+      if (body.website) return decoy()
+      if (config.minFormMs > 0) {
+        if (!Number.isFinite(body.formMs)) return json(res, 400, { error: 'outdated_page', message: 'Frissítsd az oldalt, és próbáld újra.' })
+        if (body.formMs < config.minFormMs) return decoy()
+      }
       const name = typeof body.name === 'string' ? body.name.trim() : ''
       const email = typeof body.email === 'string' ? body.email.trim() : ''
       const text = cleanText(body.message, MAX_TEXT).trim()
       if (!isSafeName(name, 2, 40)) return json(res, 400, { error: 'invalid_name', message: 'Add meg a keresztneved.' })
       if (!isEmail(email)) return json(res, 400, { error: 'invalid_email', message: 'Adj meg egy érvényes e-mail-címet.' })
       if (!text) return json(res, 400, { error: 'invalid_message', message: 'Írd le röviden a kérdésed.' })
-      if (createLimit.hit(ip)) return json(res, 429, { error: 'too_many_requests', message: 'Túl sok kérdés érkezett innen. Próbáld újra később, vagy írj Facebookon.' })
+      // Egy postafiókból: egyszerre egy nyitott beszélgetés, ugyanaz a kérdés egyszer, naponta legfeljebb néhány kérdés.
+      // Meglévő beszélgetéshez e-mail-cím alapján nem adunk hozzáférést (azt csak az indításkor kapott titkos kulcs nyitja).
+      const key = emailKey(email)
+      const dayAgo = new Date(nowMs() - 24 * HOUR).toISOString()
+      const mine = [...chats.values()].filter((item) => (item.emailKey ?? emailKey(item.email)) === key && item.createdAt > dayAgo)
+      if (mine.some((item) => OPEN.includes(item.status))) return json(res, 409, { error: 'chat_already_open', message: 'Már folyamatban van egy beszélgetésed Evelinnel. Folytasd ott, ahol elkezdted, vagy várj pár percet.' })
+      if (mine.some((item) => item.messages.some((m) => m.from === 'guest' && sameText(m.text) === sameText(text)))) return json(res, 409, { error: 'duplicate_question', message: 'Ezt a kérdést már elküldted. Evelin hamarosan válaszol rá e-mailben.' })
+      if (mine.length >= config.chatPerEmailDay) return json(res, 429, { error: 'too_many_questions', message: 'Ezzel az e-mail-címmel ma már több kérdést is küldtél. Evelin mindegyikre válaszol, kérlek, várd meg a válaszát.' })
+      if ([...chats.values()].filter((item) => item.createdAt > dayAgo).length >= config.chatTotalPerDay) return json(res, 503, { error: 'chat_overloaded', message: 'Most nagyon sok kérdés érkezett. Kérlek, írj Evelinnek Facebookon.' })
+      if (createLimit.hit(ip) || createDailyLimit.hit(ip)) return json(res, 429, { error: 'too_many_requests', message: 'Túl sok kérdés érkezett innen. Próbáld újra később, vagy írj Facebookon.' })
 
       const token = randomBytes(24).toString('base64url')
-      const chat = { id: randomUUID(), tokenHash: hashHex(token), name, email, status: 'waiting', createdAt: iso(), updatedAt: iso(), seq: 0, messages: [guestMessage(text)] }
+      const chat = { id: randomUUID(), tokenHash: hashHex(token), name, email, emailKey: key, status: 'waiting', createdAt: iso(), updatedAt: iso(), seq: 0, messages: [guestMessage(text)] }
       chats.set(chat.id, chat)
       seen.set(chat.id, nowMs())
       const reason = await unavailableReason()

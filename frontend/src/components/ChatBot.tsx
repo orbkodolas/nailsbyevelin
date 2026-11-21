@@ -95,6 +95,9 @@ export function ChatBot() {
   const timers = useRef<number[]>([])
   const nextId = useRef(Math.max(...messages.map((m) => m.id)) + 1)
   const seqRef = useRef(0)
+  // Az űrlap megnyitásának ideje: a szerver a túl gyors (gépi) kitöltést kiszűri
+  const formOpenedAt = useRef(0)
+  useEffect(() => { if (mode === 'form') formOpenedAt.current = Date.now() }, [mode])
   const panel = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -238,6 +241,7 @@ export function ChatBot() {
       email: String(data.get('email') ?? '').trim(),
       message: String(data.get('message') ?? '').trim(),
       website: String(data.get('website') ?? ''),
+      formMs: Date.now() - formOpenedAt.current,
     }
     setBusy(true)
     setError('')

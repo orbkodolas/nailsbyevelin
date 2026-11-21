@@ -58,6 +58,9 @@ export function loadConfig(env = process.env, overrides = {}) {
     chatBusyMinutes: num(env.CHAT_BUSY_MINUTES, 30), // elutasítás / lejárat után ennyi ideig nem jön új értesítés
     chatIdleMinutes: num(env.CHAT_IDLE_MINUTES, 30), // üzenet nélküli élő beszélgetés ennyi után lezárul
     chatPerHour: num(env.CHAT_PER_HOUR, 5), // új kérdések IP-nként óránként
+    chatPerDay: num(env.CHAT_PER_DAY, 15), // új kérdések IP-nként naponta
+    chatPerEmailDay: num(env.CHAT_PER_EMAIL_DAY, 3), // új kérdések e-mail-címenként 24 órán belül
+    chatTotalPerDay: num(env.CHAT_TOTAL_PER_DAY, 100), // összesen 24 órán belül (adatbázis-védelem)
     // Csendes órák (helyi idő, [kezdet, vég)): ilyenkor nincs értesítés, a kérdés egyből e-mailes módba megy
     chatQuietHours: (/^\d{1,2}-\d{1,2}$/.test(env.CHAT_QUIET_HOURS || '') ? env.CHAT_QUIET_HOURS : '22-8').split('-').map(Number),
 
