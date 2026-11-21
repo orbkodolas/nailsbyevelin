@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ApiError, bookingAction, getBooking, getRescheduleAvailability, getSettings, payBooking, rescheduleBooking, type Availability, type Payment, type PublicBooking } from '../lib/api'
 import { forint } from '../lib/catalog'
-import { addDays, formatLongDate, formatWhen, todayString } from '../lib/dates'
+import { addDays, formatDateTime, formatLongDate, formatWhen, todayString } from '../lib/dates'
 import { Modal } from '../components/Modal'
 import { DemoPayment } from '../components/DemoPayment'
 import { SlotPicker } from '../components/SlotPicker'
@@ -72,6 +72,7 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Hiba történt.')
       if (reason instanceof ApiError && reason.code === 'slot_unavailable') { setNewTime(''); setStep('pick'); loadSlots() }
+      else if (reason instanceof ApiError && reason.code === 'same_slot') { setNewTime(''); setStep('pick') }
       else if (reason instanceof ApiError && reason.status === 409) { await load(); setStep('main') }
     } finally { setBusy(false) }
   }
@@ -83,16 +84,20 @@ export function ManageBooking({ id, token, query }: { id: string; token: string;
   const active = booking.status === 'booked'
   const hoursLeft = (Date.parse(booking.startsAt) - Date.now()) / 3_600_000
 
+  const currentSlot = formatDateTime(booking.startsAt)
+  const unchanged = newDate === currentSlot.date && newTime === currentSlot.time
+
   if (step === 'pick') {
     return (
       <div className="manage">
         <h3 className="manage-title">Időpont <em>módosítása</em></h3>
-        <p className="hint">Jelenlegi időpontod: {formatWhen(booking.startsAt)}. Válassz egy szabad napot és időpontot.</p>
+        <p className="hint">Jelenlegi időpontod: {formatWhen(booking.startsAt)}. Válassz másik szabad napot és időpontot. A jelenlegi időpontodat körvonal jelöli.</p>
         <SlotPicker days={availability?.days ?? {}} loaded={Boolean(availability)} loading={slotsLoading} error={slotsError} onRetry={loadSlots}
-          maxDays={maxDays} date={newDate} time={newTime} onDate={(day) => { setNewDate(day); setNewTime('') }} onTime={setNewTime} />
+          maxDays={maxDays} date={newDate} time={newTime} onDate={(day) => { setNewDate(day); setNewTime('') }} onTime={setNewTime} current={currentSlot} />
+        {unchanged && <p className="hint">Ez a jelenlegi időpontod, a módosításhoz válassz másikat.</p>}
         {error && <p className="form-error" role="alert">{error}</p>}
         <div className="step-actions">
-          <button className="btn btn-primary" type="button" disabled={!newDate || !newTime} onClick={() => { setError(''); setStep('confirm') }}><span>Tovább</span></button>
+          <button className="btn btn-primary" type="button" disabled={!newDate || !newTime || unchanged} onClick={() => { setError(''); setStep('confirm') }}><span>Tovább</span></button>
           <button className="btn-link" type="button" onClick={leaveReschedule}>Mégsem</button>
         </div>
       </div>

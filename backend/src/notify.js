@@ -73,12 +73,12 @@ export function createNotifier({ config, fetchImpl, log = console }) {
       const text = [
         `Szia ${first}!`, '', 'Az időpontod rögzítve van.', '',
         `${booking.serviceName}`, when(booking), '',
-        'Itt tudod módosítani vagy lemondani az időpontot (egy üzenet is elég, ha nem tudsz jönni):', manageUrl(booking), '', note, signoff,
+        'Az időpontodat módosítani vagy lemondani itt tudod:', manageUrl(booking), '', note, signoff,
       ].join('\n')
       const html = renderMail({
         publicUrl: config.publicUrl, cover: true, gallery: true, preheader: `${booking.serviceName} – ${when(booking)}`,
         title: 'Az időpontod rögzítve van',
-        paragraphs: [`Szia ${first}!`, 'Köszönöm a foglalást, már várlak. Az időpontot az alábbi gombbal tudod módosítani vagy lemondani (egy üzenet is elég, ha nem tudsz jönni).'],
+        paragraphs: [`Szia ${first}!`, 'Köszönöm a foglalást, már várlak. Az időpontodat módosítani vagy lemondani az alábbi gombbal tudod.'],
         details: [['Szolgáltatás', booking.serviceName], ['Időpont', when(booking)], ...(paid ? [['Kifizetve', paid]] : [])],
         button: { label: 'Időpont kezelése', url: manageUrl(booking) }, footnote: note,
       })

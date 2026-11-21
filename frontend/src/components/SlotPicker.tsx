@@ -5,10 +5,11 @@ import { MONTHS, WEEKDAYS, formatLongDate, monthGrid } from '../lib/dates'
 type Props = {
   days: Record<string, string[]>; loaded: boolean; loading: boolean; error: string; onRetry: () => void
   maxDays: number; date: string; time: string; onDate: (date: string) => void; onTime: (time: string) => void
+  current?: { date: string; time: string } // módosításnál a jelenlegi időpont: megjelöljük a naptáron és az időpontok között
 }
 
 // Hónapnaptár a szabad napokkal, alatta a kiválasztott nap szabad időpontjai (foglaláshoz és módosításhoz közös)
-export function SlotPicker({ days, loaded, loading, error, onRetry, maxDays, date, time, onDate, onTime }: Props) {
+export function SlotPicker({ days, loaded, loading, error, onRetry, maxDays, date, time, onDate, onTime, current }: Props) {
   const [cursor, setCursor] = useState(() => { const now = new Date(); return { year: now.getFullYear(), month: now.getMonth() } })
   const grid = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor])
   const monthHasSlots = grid.some((day) => day && days[day]?.length)
@@ -33,8 +34,8 @@ export function SlotPicker({ days, loaded, loading, error, onRetry, maxDays, dat
           <div className="calendar-grid" role="grid">
             {WEEKDAYS.map((weekday, index) => <span key={index} className="weekday">{weekday}</span>)}
             {grid.map((day, index) => day === null ? <span key={`e${index}`} /> : (
-              <button key={day} type="button" className={`day${day === date ? ' is-on' : ''}`} disabled={!days[day]?.length}
-                aria-label={formatLongDate(day)} aria-pressed={day === date} onClick={() => onDate(day)}>{Number(day.slice(8))}</button>
+              <button key={day} type="button" className={`day${day === date ? ' is-on' : ''}${day === current?.date ? ' is-current' : ''}`} disabled={!days[day]?.length}
+                aria-label={day === current?.date ? `${formatLongDate(day)} (jelenlegi időpontod napja)` : formatLongDate(day)} aria-pressed={day === date} onClick={() => onDate(day)}>{Number(day.slice(8))}</button>
             ))}
           </div>
           {!loading && loaded && !monthHasSlots && <p className="hint">Ebben a hónapban nincs szabad időpont.</p>}
@@ -45,7 +46,15 @@ export function SlotPicker({ days, loaded, loading, error, onRetry, maxDays, dat
         <div className="times" aria-label={`Szabad időpontok: ${formatLongDate(date)}`}>
           <p className="hint">{formatLongDate(date)}</p>
           <div className="time-list">
-            {slots.map((slot) => <button key={slot} type="button" className={`time${slot === time ? ' is-on' : ''}`} aria-pressed={slot === time} onClick={() => onTime(slot)}>{slot}</button>)}
+            {slots.map((slot) => {
+              const isCurrent = date === current?.date && slot === current.time
+              return (
+                <button key={slot} type="button" className={`time${slot === time ? ' is-on' : ''}${isCurrent ? ' is-current' : ''}`} aria-pressed={slot === time}
+                  aria-label={isCurrent ? `${slot} (jelenlegi időpontod)` : undefined} onClick={() => onTime(slot)}>
+                  {slot}{isCurrent && <small className="time-tag">jelenlegi</small>}
+                </button>
+              )
+            })}
           </div>
         </div>
       )}

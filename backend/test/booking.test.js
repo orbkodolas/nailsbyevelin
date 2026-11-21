@@ -352,7 +352,9 @@ test('időpont módosítása: szabad idők a saját hellyel, új idő rögzül, 
   assert.equal((await call('GET', `${url('availability')}?token=rossz&from=2026-11-26&to=2026-11-26`)).status, 404)
 
   // ugyanarra az időpontra és foglalt helyre nem lehet
-  assert.equal((await call('POST', url('reschedule'), { token, date: '2026-11-26', time: '09:00' })).status, 409)
+  const same = await call('POST', url('reschedule'), { token, date: '2026-11-26', time: '09:00' })
+  assert.equal(same.status, 409); assert.equal((await same.json()).error, 'same_slot')
+  assert.equal((await (await call('GET', `/api/bookings/${booking.id}?token=${token}`)).json()).startsAt, oldAt) // nem számít módosításnak
   await call('POST', '/api/bookings', guest({ phone: '+36 20 111 2222', email: 'b@example.com', startsAt: newAt }))
   const taken = await call('POST', url('reschedule'), { token, date: '2026-11-27', time: '10:00' })
   assert.equal(taken.status, 409); assert.equal((await taken.json()).error, 'slot_unavailable')

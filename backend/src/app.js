@@ -463,8 +463,8 @@ export function createApp(options = {}) {
             const problem = rescheduleProblem(booking)
             if (problem) return { error: problem }
             const end = new Date(start.getTime() + booking.durationMinutes * 60_000)
+            if (start.toISOString() === booking.startsAt) return { error: 'same_slot' } // nincs változás: nem módosítás
             if (!slotsOn(state, body.date, booking.durationMinutes, booking.id).some((slot) => slot.time === body.time && slot.startsAt === start.toISOString())) return { error: 'slot_unavailable' }
-            if (start.toISOString() === booking.startsAt) return { error: 'same_slot' }
             const previousStartsAt = booking.startsAt
             booking.rescheduledFrom = [...(booking.rescheduledFrom || []), { startsAt: previousStartsAt, endsAt: booking.endsAt, at: now().toISOString() }]
             booking.rescheduleCount = (booking.rescheduleCount || 0) + 1

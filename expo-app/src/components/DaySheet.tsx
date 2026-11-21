@@ -77,6 +77,8 @@ export function DaySheet({ day, today, bookings, blocks, fullDayBlocked, info, n
 
   if (!day || !info) return null
 
+  // A lemondott és már visszautaltnak jelölt foglalásnak nincs több teendője: nem tartjuk a napirenden
+  const shown = bookings.filter((b) => !(b.status === 'cancelled' && b.refundStatus === 'refunded'))
   const active = bookings.filter(isActive)
   const counted = bookings.filter((b) => b.status !== 'cancelled' && b.status !== 'expired' && b.status !== 'no_show')
   const income = counted.reduce((sum, b) => sum + b.priceHuf, 0)
@@ -186,7 +188,7 @@ export function DaySheet({ day, today, bookings, blocks, fullDayBlocked, info, n
               <Text style={s.eyebrow}>{day === today ? 'Ma' : past ? 'Elmúlt nap' : 'Napirend'}</Text>
               <Text style={s.h2}>{fmtDayLong(day)}</Text>
               {info.holiday && <Text style={[s.title, { color: c.gold, fontFamily: f.medium }]}>{info.holiday}</Text>}
-              <Text style={s.muted}>{isOpen ? `Munkaidő ${workText}` : 'Zárva'} · {bookings.length ? `${active.length} aktív foglalás${income ? ` · ${huf(income)}` : ''}` : 'nincs foglalás'}</Text>
+              <Text style={s.muted}>{isOpen ? `Munkaidő ${workText}` : 'Zárva'} · {shown.length ? `${active.length} aktív foglalás${income ? ` · ${huf(income)}` : ''}` : 'nincs foglalás'}</Text>
               {prepaid > 0 && <Text style={[s.small, { color: c.gold }]}>Helyszínen: {huf(income - prepaid)} · előleg ({huf(prepaid)}) már befizetve</Text>}
             </View>
             {desktop && <IconButton icon={X} label="Bezárás" onPress={close} />}
@@ -235,13 +237,13 @@ export function DaySheet({ day, today, bookings, blocks, fullDayBlocked, info, n
               )
             })}
 
-            {bookings.length === 0 && !blocks.length && !editor && (
+            {shown.length === 0 && !blocks.length && !editor && (
               <View style={{ alignItems: 'center', paddingVertical: 28, gap: 8 }}>
                 <CalendarX size={36} color={c.faint} strokeWidth={1.4} />
                 <Text style={s.muted}>Erre a napra nincs foglalás.</Text>
               </View>
             )}
-            {bookings.map((b) => <BookingCard key={b.id} booking={b} now={now} onUpdated={onBookingUpdated} />)}
+            {shown.map((b) => <BookingCard key={b.id} booking={b} now={now} onUpdated={onBookingUpdated} />)}
           </ScrollView>
 
           {editor ? (
