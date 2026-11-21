@@ -111,3 +111,34 @@
   .chat-panel, .chat-panel[data-open] { transform: none; transition: opacity 0.2s, visibility 0s linear 0.2s; }
   .chat-typing span { animation-duration: 2s; }
 }
+
+/* ---------- Élő chat Evelinnel: űrlap, állapotgombok, lezárt beszélgetés ---------- */
+.chat-live-link {
+  align-self: flex-start; margin: 10px 0 0 var(--space-4); padding: 0; border: 0; border-bottom: 1px solid var(--line); background: none;
+  font: 400 0.7rem/1.2 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--rose); cursor: pointer;
+}
+.chat-live-link:hover { border-color: var(--rose-deep); }
+.chat-link {
+  padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.85rem;
+  text-decoration: underline; text-underline-offset: 0.25em; cursor: pointer;
+}
+.chat-link:hover { color: var(--rose); }
+.chat-end { padding: 10px var(--space-4) 0; }
+.chat-ended { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px var(--space-4) 14px; }
+.chat-error { margin: 0 var(--space-4); padding: 8px 0 0; font-size: 0.85rem; color: #e9a4a4; }
+.chat-ask { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-4); scrollbar-width: thin; }
+.chat-ask-title { margin: 0 0 4px; font: 400 1.3rem var(--serif); color: var(--cream); }
+.chat-ask-lead { margin: 0 0 16px; font-size: 0.88rem; color: var(--muted); }
+.chat-ask .field input, .chat-ask .field textarea { font-size: 16px; }
+.chat-ask .field textarea { min-height: 110px; }
+.chat-submit {
+  margin-top: 4px; padding: 14px 22px; border: 0; border-radius: 999px; background: var(--rose); color: var(--ink);
+  font: 500 0.72rem/1 var(--sans); letter-spacing: 0.2em; text-transform: uppercase; cursor: pointer; transition: opacity 0.2s;
+}
+.chat-submit:disabled { opacity: 0.5; cursor: default; }
+.chat-ask .chat-link { align-self: center; margin-top: 14px; }
+.chat-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.chat-fab[data-unread]::after {
+  content: ''; position: absolute; top: 4px; right: 4px; width: 13px; height: 13px; border-radius: 50%;
+  background: #8fc79a; border: 2px solid var(--plum);
+}

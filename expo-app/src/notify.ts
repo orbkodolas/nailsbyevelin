@@ -10,11 +10,7 @@ const CHANNEL = 'arrivals'
 const PREF_KEY = 'nbe_notify_on'
 const supported = Platform.OS !== 'web'
 
-if (supported) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
-  })
-}
+// Az előtéri megjelenítést (setNotificationHandler) a push.ts állítja be
 
 export async function getNotifyPref() {
   if (!supported) return false

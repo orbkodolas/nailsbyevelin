@@ -1,4 +1,6 @@
 import { registerRootComponent } from 'expo';
+// Elsőként: értesítéskezelő és a háttérfeladat (válasz az értesítésből bezárt appnál is)
+import './src/push';
 
 import App from './App';
 

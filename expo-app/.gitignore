@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase (push) – a CI a GOOGLE_SERVICES_JSON secretből állítja elő
+google-services.json

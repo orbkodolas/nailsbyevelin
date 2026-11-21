@@ -20,6 +20,8 @@ jobs:
         with: { distribution: temurin, java-version: 17 }
       - uses: gradle/actions/setup-gradle@v4
       - run: npm ci
+      - run: echo "$GOOGLE_SERVICES_JSON" > google-services.json
+        env: { GOOGLE_SERVICES_JSON: "${{ secrets.GOOGLE_SERVICES_JSON }}" }
       - run: npx expo prebuild --platform android --no-install
       - name: Gradle assembleRelease
         working-directory: expo-app/android

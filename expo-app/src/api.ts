@@ -59,6 +59,7 @@ export class ApiError extends Error {
 const messages: Record<string, string> = {
   admin_auth_required: 'Hibás vagy lejárt belépési kulcs.',
   booking_not_active: 'Ez a foglalás már nem aktív.',
+  not_started: 'Az időpont még nem kezdődött el, csak utána jelölhető késznek.',
   payment_not_required: 'Ennél nincs függő fizetés.',
   voucher_not_active: 'Az utalvány nem aktív vagy lejárt.',
   invalid_range: 'Érvénytelen dátum.',
@@ -68,6 +69,8 @@ const messages: Record<string, string> = {
   invalid_pairing_code: 'Hibás, lejárt vagy már felhasznált párosító kód.',
   too_many_devices: 'Elérted az eszközök számának korlátját (10). Tilts le egy régit.',
   too_many_requests: 'Túl sok sikertelen próbálkozás. Várj 15 percet, és próbáld újra.',
+  chat_closed: 'Ez a beszélgetés már lezárult.',
+  visitor_gone: 'A látogató már nincs az oldalon. Válaszolj neki e-mailben.',
   network: 'Nincs kapcsolat a szerverrel. Próbáld újra.',
 }
 export const errorText = (error: unknown) =>
@@ -127,3 +130,25 @@ export async function upgradeToDeviceToken() {
   const me = await api<{ kind: 'master' | 'device' }>('/api/admin/whoami')
   if (me.kind === 'master') await pairDevice((await createPairingCode()).code)
 }
+
+// ---------- élő csevegés a weboldalról ----------
+export type ChatMessage = { id: string; from: 'guest' | 'evelin'; text: string; at: string }
+/** waiting: Evelinre vár (2 perc) · live: élő beszélgetés · missed: e-mailben kell válaszolni · closed: lezárva */
+export type ChatStatus = 'waiting' | 'live' | 'missed' | 'closed'
+export type Chat = {
+  id: string; name: string; email: string; status: ChatStatus
+  reason: 'timeout' | 'declined' | 'busy' | 'quiet' | 'offline' | 'with_guest' | 'no_device' | null
+  createdAt: string; updatedAt: string; deadline: string | null; closedBy: 'guest' | 'evelin' | 'idle' | null
+  emailedAt: string | null; readAt: string | null; visitorOnline: boolean; unread: number; messages: ChatMessage[]
+}
+export type ChatSettings = { available: boolean; busyUntil: string | null }
+export type ChatList = { version: number; serverNow: string; settings: ChatSettings; chats: Chat[] }
+
+/** after + wait: a szerver legfeljebb 20 mp-ig vár változásra (long-poll). */
+export const getChats = (after?: number) => api<ChatList>(`/api/admin/chats${after ? `?after=${after}&wait=1` : ''}`)
+export const chatReply = (id: string, text: string, clientId: string) => api<Chat>(`/api/admin/chats/${id}/reply`, { method: 'POST', body: { text, clientId } })
+export const chatAction = (id: string, action: 'decline' | 'close' | 'read' | 'emailed', body?: unknown) =>
+  api<Chat>(`/api/admin/chats/${id}/${action}`, { method: 'POST', body: body ?? {} })
+export const deleteChat = (id: string) => api<{ ok: true }>(`/api/admin/chats/${id}`, { method: 'DELETE' })
+export const setChatSettings = (body: { available?: boolean; clearBusy?: boolean }) => api<ChatSettings>('/api/admin/chat-settings', { method: 'POST', body })
+export const registerPushToken = (token: string) => api<{ ok: true }>('/api/admin/push-token', { method: 'POST', body: { token, platform: Platform.OS } })

@@ -82,7 +82,7 @@ test('egy vendég egyszerre legfeljebb 2 aktív foglalást tarthat', async () =>
   assert.equal((await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-11-26', '09:00') }))).status, 409)
 }))
 
-test('meg nem jelenés után teljes előrefizetés kell; késés esetén az előző díj is', async () => withApi({}, async ({ call }) => {
+test('meg nem jelenés után teljes előrefizetés kell; késés esetén az előző díj is', async () => withApi({}, async ({ call, clock }) => {
   const first = await (await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-11-24', '09:00') }))).json()
   assert.equal((await call('POST', `/api/admin/bookings/${first.id}/no-show`, { reason: 'late' }, admin)).status, 200)
 
@@ -95,7 +95,10 @@ test('meg nem jelenés után teljes előrefizetés kell; késés esetén az elő
   assert.equal((await call('POST', `/api/bookings/${next.id}/confirm`, { token: next.manageToken })).status, 200)
 
   // a díj rendezve: a következő foglalás ismét teljes árú előrefizetés (a no-show miatt), de felár nélkül
-  await call('POST', `/api/admin/bookings/${next.id}/complete`, {}, admin)
+  // el nem kezdődött időpont nem jelölhető késznek; a kezdés után igen
+  assert.equal((await call('POST', `/api/admin/bookings/${next.id}/complete`, {}, admin)).status, 409)
+  clock.current = new Date(Date.parse(next.startsAt) + 60_000)
+  assert.equal((await call('POST', `/api/admin/bookings/${next.id}/complete`, {}, admin)).status, 200)
   const third = await (await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-11-27', '09:00') }))).json()
   assert.equal(third.amountDueHuf, 5000)
 }))

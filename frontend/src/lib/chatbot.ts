@@ -2,7 +2,11 @@
 import { catalog, durationLabel, forint, minPrice } from './catalog'
 import { site } from './site'
 
-export type ChatAction = { label: string; kind: 'booking' } | { label: string; kind: 'section'; target: string } | { label: string; kind: 'link'; href: string }
+export type ChatAction =
+  | { label: string; kind: 'booking' }
+  | { label: string; kind: 'live' }
+  | { label: string; kind: 'section'; target: string }
+  | { label: string; kind: 'link'; href: string }
 export type Reply = { text: string; list?: string[]; after?: string; actions?: ChatAction[]; chips?: IntentId[] }
 export type BotSettings = { depositPercent: number; maxDaysAhead: number; paymentMethods: { label: string }[] }
 
@@ -74,7 +78,8 @@ const priceRange = (id: string) => {
 
 const book: ChatAction = { label: 'Időpontot foglalok', kind: 'booking' }
 const priceList: ChatAction = { label: 'Árlista', kind: 'section', target: '#arlista' }
-const facebook: ChatAction | null = site.facebookUrl ? { label: 'Írok Evelinnek', kind: 'link', href: site.facebookUrl } : null
+const live: ChatAction = { label: 'Írok Evelinnek', kind: 'live' }
+const facebook: ChatAction | null = site.facebookUrl ? { label: 'Üzenet Facebookon', kind: 'link', href: site.facebookUrl } : null
 const withFacebook = (actions: ChatAction[]) => (facebook ? [...actions, facebook] : actions)
 
 function categoryReply(id: string, chips: IntentId[]): Reply {
@@ -164,7 +169,7 @@ export function answer(id: IntentId, settings: BotSettings | null): Reply {
       return {
         text: lines.length ? `Evelin ${site.cityIn} dolgozik, itt éred el:` : `Evelin ${site.cityIn} (${site.region}) dolgozik. A pontos címet Facebookon kérdezheted meg tőle, ott minden másban is segít.`,
         list: lines.length ? lines : undefined,
-        actions: withFacebook([...(site.phone ? [{ label: 'Hívás', kind: 'link' as const, href: `tel:${site.phone.replace(/\s/g, '')}` }] : []), book]),
+        actions: [live, ...withFacebook([...(site.phone ? [{ label: 'Hívás', kind: 'link' as const, href: `tel:${site.phone.replace(/\s/g, '')}` }] : []), book])],
         chips: ['booking', 'prices'],
       }
     }
@@ -185,7 +190,7 @@ export function answer(id: IntentId, settings: BotSettings | null): Reply {
     default:
       return {
         text: 'Erre most nem tudok pontos választ adni. Válassz egy témát lent, vagy írj Evelinnek, és ő személyesen válaszol.',
-        actions: withFacebook([]),
+        actions: [live, ...withFacebook([])],
         chips: startChips,
       }
   }
@@ -193,5 +198,6 @@ export function answer(id: IntentId, settings: BotSettings | null): Reply {
 
 export const welcome: Reply = {
   text: 'Szia! A Nails by Evelin asszisztense vagyok. Kérdezz bátran az árakról, a foglalásról vagy az utalványról, vagy válassz egy témát.',
+  actions: [live],
   chips: startChips,
 }

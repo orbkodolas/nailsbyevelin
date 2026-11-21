@@ -7,6 +7,8 @@ import { catalog, findService, services, publicRules } from './catalog.js'
 import { loadConfig } from './config.js'
 import { createPayments } from './payments.js'
 import { createNotifier, formatDateTime } from './notify.js'
+import { createFcm, parseServiceAccount } from './fcm.js'
+import { createLiveChat } from './chat.js'
 import { addDays, closedByRule, isDateString, isTime, localDate, localTime, overlaps, slotsForDate, zonedToUtc } from './time.js'
 import { adminTokenMatches, cleanText, clientIp, createLimiter, HTML_CSP, isSafeName, sameSecret, setSecurityHeaders } from './security.js'
 
@@ -82,6 +84,10 @@ export function createApp(options = {}) {
   const notifier = createNotifier({ config, fetchImpl, log })
   const pending = new Set()
   const background = (promise) => { const tracked = promise.catch(() => {}).finally(() => pending.delete(tracked)); pending.add(tracked) }
+  const serviceAccount = parseServiceAccount(config.fcmServiceAccount)
+  if (config.fcmServiceAccount && !serviceAccount) log.error?.('[push] FCM_SERVICE_ACCOUNT érvénytelen – értesítés nélkül fut a csevegés.')
+  const fcm = options.fcm ?? (serviceAccount ? createFcm({ serviceAccount, fetchImpl, log }) : null)
+  const liveChat = createLiveChat({ store, config, now, log, notifier, fcm, background, readBody, json })
 
   // ---------- védelem (OWASP API4/API6, OAT-021, NIST SP 800-63B-4) ----------
   // Foglalás/utalvány létrehozása IP-nként óránként és naponta korlátozva
@@ -276,6 +282,7 @@ export function createApp(options = {}) {
 
   // ---------- időzített feladatok ----------
   async function tick() {
+    await liveChat.tick().catch((error) => log.error?.('[chat]', error))
     const changed = await store.update((state) => expireHolds(state))
     if (!config.resendApiKey || !config.mailFrom) return { expired: changed }
     const due = await store.read((state) => state.reminders.filter((item) => item.status === 'queued' && item.dueAt <= now().toISOString()).map((item) => ({ ...item, booking: state.bookings.find((b) => b.id === item.bookingId) })))
@@ -295,7 +302,7 @@ export function createApp(options = {}) {
     setSecurityHeaders(res)
     res.setHeader('access-control-allow-origin', config.corsOrigin)
     res.setHeader('access-control-allow-methods', 'GET, POST, DELETE, OPTIONS')
-    res.setHeader('access-control-allow-headers', 'content-type, authorization, x-manage-token')
+    res.setHeader('access-control-allow-headers', 'content-type, authorization, x-manage-token, x-chat-token')
     if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
 
     const url = new URL(req.url, 'http://localhost')
@@ -524,6 +531,12 @@ export function createApp(options = {}) {
         return reply ? (res.writeHead(200, { 'content-type': 'application/json', ...reply.headers }), res.end(reply.body)) : json(res, 200, { ok: true })
       }
 
+      // ----- élő csevegés (látogató) -----
+      if (path === '/api/chat' || path.startsWith('/api/chat/')) {
+        const handled = await liveChat.publicRoute(req, res, path, url, ipOf(req))
+        if (handled !== false) return
+      }
+
       // ===== admin =====
       // ----- új admin eszköz párosítása (nyilvános, de csak érvényes párosító kóddal) -----
       if (req.method === 'POST' && path === '/api/devices/pair') {
@@ -566,6 +579,11 @@ export function createApp(options = {}) {
           log.error?.(`[biztonság] sikertelen admin hitelesítés (${req.method} ${path})`)
           return json(res, 401, { error: 'admin_auth_required' })
         }
+      }
+
+      if (path.startsWith('/api/admin/chat') || path === '/api/admin/push-token') {
+        const handled = await liveChat.adminRoute(req, res, path, url, req.admin)
+        if (handled !== false) return
       }
 
       if (req.method === 'GET' && path === '/api/admin/whoami') {
@@ -645,6 +663,8 @@ export function createApp(options = {}) {
             releaseBooking(state, booking, 'no_show')
           } else if (action === 'complete') {
             if (booking.status !== 'booked') return { error: 'booking_not_active' }
+            // El nem kezdődött időpont nem jelölhető teljesítettnek
+            if (Date.parse(booking.startsAt) > now().getTime()) return { error: 'not_started' }
             booking.status = 'completed'; booking.completedAt = now().toISOString()
           } else if (action === 'refunded') {
             // Az előleg visszautalása kézzel történik (banki utalás); itt csak megjelöljük, hogy megvolt

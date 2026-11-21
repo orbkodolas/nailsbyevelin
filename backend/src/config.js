@@ -52,6 +52,15 @@ export function loadConfig(env = process.env, overrides = {}) {
     mailFrom: env.MAIL_FROM || '',
     reminderTickSeconds: num(env.REMINDER_TICK_SECONDS, 60),
 
+    // Élő csevegés: push az admin appba (Firebase szolgáltatásfiók JSON, nyersen vagy base64-ben)
+    fcmServiceAccount: env.FCM_SERVICE_ACCOUNT || '',
+    chatTimeoutSeconds: num(env.CHAT_TIMEOUT_SECONDS, 120), // ennyi ideje van Evelinnek válaszolni
+    chatBusyMinutes: num(env.CHAT_BUSY_MINUTES, 30), // elutasítás / lejárat után ennyi ideig nem jön új értesítés
+    chatIdleMinutes: num(env.CHAT_IDLE_MINUTES, 30), // üzenet nélküli élő beszélgetés ennyi után lezárul
+    chatPerHour: num(env.CHAT_PER_HOUR, 5), // új kérdések IP-nként óránként
+    // Csendes órák (helyi idő, [kezdet, vég)): ilyenkor nincs értesítés, a kérdés egyből e-mailes módba megy
+    chatQuietHours: (/^\d{1,2}-\d{1,2}$/.test(env.CHAT_QUIET_HOURS || '') ? env.CHAT_QUIET_HOURS : '22-8').split('-').map(Number),
+
     // Fizetés: PAYMENT_PROVIDERS=stripe,barion,simplepay (az első az alapértelmezett); a "manual" mindig elérhető
     paymentProviders: (env.PAYMENT_PROVIDERS || '').split(',').map((item) => item.trim()).filter(Boolean),
     demoPayments: env.DEMO_PAYMENTS === '1', // kamu kártyás fizetőoldal teszteléshez; éles üzemben ne kapcsold be

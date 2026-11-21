@@ -19,7 +19,7 @@ const ORB_TOP = 1 - BOX / 2 // a kör közepe a sáv felső élén
  * Mindkettő ugyanazt a rugós értéket követi (natív animáció), ami mindig a pillanatnyi
  * helyzetből és sebességből indul, így gyors nyomkodásnál sem ugrik.
  */
-export function TabBar({ tabs, active, onSelect }: { tabs: readonly Tab[]; active: string; onSelect: (key: string) => void }) {
+export function TabBar({ tabs, active, onSelect, badges }: { tabs: readonly Tab[]; active: string; onSelect: (key: string) => void; badges?: Record<string, number> }) {
   const [width, setWidth] = useState(0)
   const index = Math.max(0, tabs.findIndex((t) => t.key === active))
   const x = useRef(new Animated.Value(0)).current
@@ -86,12 +86,20 @@ export function TabBar({ tabs, active, onSelect }: { tabs: readonly Tab[]; activ
       <View style={{ flex: 1, flexDirection: 'row' }}>
         {tabs.map((t, i) => {
           const on = i === index
+          const count = badges?.[t.key] ?? 0
           return (
             <Pressable key={t.key} onPress={() => onSelect(t.key)} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={t.label}
               style={{ flex: 1, alignItems: 'center', paddingTop: 12, paddingBottom: 12 }}>
-              <Animated.View style={{ opacity: shown[i], transform: [{ translateY: shown[i].interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) }] }}>
-                <t.icon size={21} color={c.muted} strokeWidth={1.6} />
-              </Animated.View>
+              <View>
+                <Animated.View style={{ opacity: shown[i], transform: [{ translateY: shown[i].interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) }] }}>
+                  <t.icon size={21} color={c.muted} strokeWidth={1.6} />
+                </Animated.View>
+                {count > 0 && (
+                  <View style={{ position: 'absolute', top: -6, right: -11, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: c.rose, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ color: c.bg, fontSize: 10, lineHeight: 12, fontFamily: f.semibold }}>{count > 99 ? '99+' : count}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={{ marginTop: 'auto', color: on ? c.rose : c.muted, fontSize: 12, lineHeight: 16, fontFamily: on ? f.semibold : f.sans }}>{t.label}</Text>
             </Pressable>
           )

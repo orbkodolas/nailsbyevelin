@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar'
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, AppState, Pressable, Text, View } from 'react-native'
+import { ActivityIndicator, AppState, Platform, Pressable, Text, View } from 'react-native'
+import * as Notifications from 'expo-notifications'
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { useFonts } from 'expo-font'
 // Csak a használt betűváltozatok (a csomag gyökeréből importálva mind bekerülne)
@@ -9,9 +10,9 @@ import { Jost_500Medium } from '@expo-google-fonts/jost/500Medium'
 import { Jost_600SemiBold } from '@expo-google-fonts/jost/600SemiBold'
 import { CormorantGaramond_500Medium } from '@expo-google-fonts/cormorant-garamond/500Medium'
 import { CormorantGaramond_500Medium_Italic } from '@expo-google-fonts/cormorant-garamond/500Medium_Italic'
-import { CalendarDays, ChartSpline, Gift, LogOut, ShieldCheck } from 'lucide-react-native'
+import { CalendarDays, ChartSpline, Gift, LogOut, MessageCircle } from 'lucide-react-native'
 import { clearToken, loadToken, revokeDevice, upgradeToDeviceToken, usingBuiltInKey, wakeServer } from './src/api'
-import { Devices } from './src/screens/Devices'
+import { Chat } from './src/screens/Chat'
 import { clearCache } from './src/useLoad'
 import { Dashboard } from './src/screens/Dashboard'
 import { Login } from './src/screens/Login'
@@ -21,12 +22,14 @@ import { c, dayKey, f, fmtDayLong, s } from './src/theme'
 import { DialogLayer, IconButton, confirm, useLayout } from './src/ui'
 import { ToastLayer } from './src/toast'
 import { TabBar } from './src/components/TabBar'
+import { clearChats, openChat, startChatSync, useUnreadCount } from './src/chatStore'
+import { chatIdOf, handleChatAction, registerForChatPush } from './src/push'
 
 const tabs = [
   { key: 'calendar', label: 'Naptár', icon: CalendarDays, Screen: Dashboard },
   { key: 'revenue', label: 'Bevétel', icon: ChartSpline, Screen: Revenue },
+  { key: 'chat', label: 'Chat', icon: MessageCircle, Screen: Chat },
   { key: 'vouchers', label: 'Utalványok', icon: Gift, Screen: Vouchers },
-  { key: 'devices', label: 'Eszközök', icon: ShieldCheck, Screen: Devices },
 ] as const
 
 const timeFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Budapest', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
@@ -65,7 +68,31 @@ export default function App() {
       if (t) upgradeToDeviceToken().catch(() => {})
     })
   }, [])
-  const logout = useCallback(() => { clearCache(); setVisited(['calendar']); clearToken().finally(() => setAuth('out')) }, [])
+  const logout = useCallback(() => { clearCache(); clearChats(); setVisited(['calendar']); clearToken().finally(() => setAuth('out')) }, [])
+
+  // Belépve: élő csevegés szinkron és push-értesítések
+  useEffect(() => {
+    if (auth !== 'in') return
+    const stop = startChatSync(logout)
+    registerForChatPush().catch(() => {})
+    return stop
+  }, [auth, logout])
+
+  // Értesítésre koppintás / gombos válasz (bezárt appnál is az utolsó válasz)
+  useEffect(() => {
+    if (Platform.OS === 'web') return
+    const handle = (response: Notifications.NotificationResponse) => {
+      if (response.actionIdentifier === 'reply' || response.actionIdentifier === 'decline') { handleChatAction(response); return }
+      const id = chatIdOf(response)
+      if (id) { setTab('chat'); openChat(id) }
+    }
+    const sub = Notifications.addNotificationResponseReceivedListener(handle)
+    Notifications.getLastNotificationResponseAsync().then((r) => { if (r) handle(r) }).catch(() => {})
+    return () => sub.remove()
+  }, [])
+
+  const unread = useUnreadCount()
+  const badges: Record<string, number> = { chat: unread }
 
   const current = tabs.find((t) => t.key === tab)!
   const { desktop, gutter } = useLayout()
@@ -114,6 +141,9 @@ export default function App() {
                       { backgroundColor: on ? c.roseSoft : hovered || pressed ? c.raised : 'transparent' }]}>
                     <t.icon size={19} color={on ? c.rose : c.muted} strokeWidth={on ? 2 : 1.6} />
                     <Text style={{ color: on ? c.rose : c.text, fontSize: 15, fontFamily: on ? f.semibold : f.sans }}>{t.label}</Text>
+                    {(badges[t.key] ?? 0) > 0 && (
+                      <Text style={{ marginLeft: 'auto', backgroundColor: c.rose, color: c.bg, borderRadius: 99, minWidth: 22, overflow: 'hidden', textAlign: 'center', paddingHorizontal: 6, fontSize: 12, fontFamily: f.semibold }}>{badges[t.key]}</Text>
+                    )}
                   </Pressable>
                 )
               })}
@@ -132,7 +162,7 @@ export default function App() {
           <>
             {header}
             {screen}
-            <TabBar tabs={tabs} active={tab} onSelect={(k) => setTab(k as typeof tab)} />
+            <TabBar tabs={tabs} active={tab} onSelect={(k) => setTab(k as typeof tab)} badges={badges} />
           </>
         ))}
       </SafeAreaView>

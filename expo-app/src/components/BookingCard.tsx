@@ -36,8 +36,7 @@ export function BookingCard({ booking: b, onUpdated, now }: { booking: Booking; 
   const active = isActive(b)
   const running = active && Date.parse(b.startsAt) <= now && now < Date.parse(b.endsAt)
   const started = Date.parse(b.startsAt) <= now
-  // „Kész” csak az időpont napjától: jövőbeli foglalást nem lehet előre teljesítettnek jelölni
-  const onItsDay = dayKey(b.startsAt) <= dayKey(new Date(now))
+  // „Kész” csak a kezdés után: el nem kezdődött időpontot nem lehet teljesítettnek jelölni
   const paid = b.amountPaidHuf || 0
   const gone = b.status === 'cancelled' || b.status === 'no_show' || b.status === 'expired'
 
@@ -113,7 +112,6 @@ export function BookingCard({ booking: b, onUpdated, now }: { booking: Booking; 
             {(b.status === 'pending_payment' || b.status === 'expired') && ['required', 'refund_needed'].includes(b.paymentStatus) &&
               <Button small label="Fizetés megjött" icon={Banknote}
                 onPress={async () => { if (await confirm('Fizetés megerősítése', `${b.name} befizetése megérkezett?`)) run('payment-confirmed') }} />}
-            {b.status === 'booked' && !started && onItsDay && <Button small ghost label="Kész" icon={Check} onPress={() => run('complete')} />}
             {started && <Button small ghost label="Nem jött el" icon={UserX} onPress={noShow} />}
             <Button small ghost danger label="Lemondás" icon={Ban}
               onPress={async () => {
