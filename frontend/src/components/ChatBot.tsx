@@ -127,7 +127,8 @@ export function ChatBot() {
       window.setTimeout(() => scrollToTarget(action.target, -72), isMobile() ? 320 : 0)
       return
     }
-    window.open(action.href, '_blank', 'noopener,noreferrer')
+    if (action.href.startsWith('tel:')) window.location.href = action.href
+    else window.open(action.href, '_blank', 'noopener,noreferrer')
   }
 
   const last = messages[messages.length - 1]
@@ -143,7 +144,7 @@ export function ChatBot() {
 
       <div ref={panel} id="chat-panel" className="chat-panel" data-open={open || undefined} role="dialog" aria-modal="false"
         aria-label="Nails by Evelin asszisztens" aria-hidden={!open} inert={!open} data-lenis-prevent>
-        <header className="chat-head">
+        <div className="chat-head">
           <img className="chat-avatar" src={`${import.meta.env.BASE_URL}images/logo-sm.webp`} alt="" width={40} height={40} />
           <div className="chat-title">
             <strong>Nails <em>by</em> Evelin</strong>
@@ -152,7 +153,7 @@ export function ChatBot() {
           <button type="button" className="chat-close" aria-label="Csevegés bezárása" onClick={() => { setOpen(false); fab.current?.focus() }}>
             <X size={20} strokeWidth={1.6} aria-hidden="true" />
           </button>
-        </header>
+        </div>
 
         <div ref={list} className="chat-log" aria-live="polite" aria-relevant="additions">
           {messages.map((message) => message.from === 'user' ? (

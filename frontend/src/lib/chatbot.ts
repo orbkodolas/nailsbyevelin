@@ -38,7 +38,7 @@ const intents: { id: IntentId; priority: number; keys: string[] }[] = [
   { id: 'companion', priority: 5, keys: ['kiser', 'baratnom', 'baratnovel', 'gyerek', 'anyuk', 'parom', 'hozhat', 'velem jon', 'egyutt jo'] },
   { id: 'payment', priority: 4, keys: ['fizet', 'kartya', 'bankkartya', 'keszpenz', 'atutal', 'eloleg', 'foglalo', 'szamla', 'utal'] },
   { id: 'voucher', priority: 6, keys: ['utalvany', 'ajandek', 'kupon', 'voucher', 'ajandekkartya', 'meglep'] },
-  { id: 'contact', priority: 4, keys: ['hol ', 'hol van', 'cim ', 'cime', 'helyszin', 'telefon', 'elerhet', 'kapcsolat', 'facebook', 'instagram', 'uzenet', 'irj', 'hivhat', 'beszel'] },
+  { id: 'contact', priority: 4, keys: ['hol ', 'hol van', 'merre', 'kaposvar', 'varos', 'melyik var', 'cim ', 'cime', 'helyszin', 'telefon', 'elerhet', 'kapcsolat', 'facebook', 'instagram', 'uzenet', 'irj', 'hivhat', 'hivni', 'telefonszam', 'beszel'] },
   { id: 'hours', priority: 3, keys: ['nyitva', 'nyitvatart', 'hetveg', 'szombat', 'vasarnap', 'hetfo', 'unnep', 'karacsony', 'szilveszter', 'delutan', 'munkaido', 'mikor lehet', 'mikor jo', 'hanytol'] },
   { id: 'rules', priority: 3, keys: ['hazirend', 'szabaly', 'feltetel'] },
 ]
@@ -162,9 +162,9 @@ export function answer(id: IntentId, settings: BotSettings | null): Reply {
     case 'contact': {
       const lines = [site.phone && `Telefon: ${site.phone}`, site.address && `Cím: ${site.address}`].filter(Boolean) as string[]
       return {
-        text: lines.length ? 'Itt éred el Evelint:' : 'Evelinnek Facebookon tudsz üzenni, ott a pontos helyszínről és minden egyébről is kérdezhetsz.',
+        text: lines.length ? `Evelin ${site.cityIn} dolgozik, itt éred el:` : `Evelin ${site.cityIn} (${site.region}) dolgozik. A pontos címet Facebookon kérdezheted meg tőle, ott minden másban is segít.`,
         list: lines.length ? lines : undefined,
-        actions: withFacebook([book]),
+        actions: withFacebook([...(site.phone ? [{ label: 'Hívás', kind: 'link' as const, href: `tel:${site.phone.replace(/\s/g, '')}` }] : []), book]),
         chips: ['booking', 'prices'],
       }
     }

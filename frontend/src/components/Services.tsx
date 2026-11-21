@@ -26,7 +26,7 @@ export function Services() {
                 <Photo className="service-thumb" id={previews[category.id as keyof typeof previews]} sizes="120px" />
                 <p className="service-meta"><span>{forint(minPrice(category))}-tól</span><span>{durationLabel(category.durationMinutes)}</span></p>
               </div>
-              <button type="button" className="service-go" onClick={() => openBooking(category.id)} aria-label={`${category.name} – időpontfoglalás`}><span>Időpont</span><i aria-hidden="true">→</i></button>
+              <button type="button" className="service-go" onClick={() => openBooking(category.id)} aria-label={`Időpont: ${category.name}`}><span>Időpont</span><i aria-hidden="true">→</i></button>
             </li>
           ))}
         </ol>

@@ -10,11 +10,14 @@ import '@fontsource-variable/jost/index.css'
 import '@fontsource/pinyon-script/400.css'
 import './index.css'
 import App from './App.tsx'
+import { initTapFeedback } from './lib/tapFeedback'
 
 // Keretvédelem (clickjacking ellen): ha egy idegen oldal iframe-be töltené, kitörünk belőle
 if (window.top !== window.self) {
   try { window.top!.location.href = window.location.href } catch { document.documentElement.style.display = 'none' }
 }
+
+initTapFeedback()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

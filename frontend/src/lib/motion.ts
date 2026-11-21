@@ -22,6 +22,8 @@ export const getLenis = () => lenis
 // Érintésen a natív görgetés marad: azt a böngésző a kompozitorban, a kijelző teljes frekvenciáján futtatja,
 // ezt JS-ből szinkronizálni csak rontana rajta.
 export function initSmoothScroll() {
+  // A böngésző ne állítsa vissza a régi görgetési pozíciót frissítéskor (a Lenis-szel ütközve ez okozott rántást)
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
   if (reducedMotion()) return () => {}
   const instance = new Lenis({ lerp: 0.1, wheelMultiplier: 1, smoothWheel: true, syncTouch: false, autoRaf: false })
   lenis = instance
@@ -31,11 +33,17 @@ export function initSmoothScroll() {
   return () => { gsap.ticker.remove(tick); instance.destroy(); lenis = null }
 }
 
-export function scrollToTarget(target: string | number, offset = -72) {
-  const element = typeof target === 'string' ? document.querySelector(target) : null
-  const reduced = reducedMotion()
-  if (lenis) lenis.scrollTo(typeof target === 'string' ? (element as HTMLElement) ?? 0 : target, { offset, duration: reduced ? 0.01 : 1, easing: (t: number) => 1 - Math.pow(1 - t, 4) })
-  else if (element) element.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
+// Horgonyhoz görgetés. A tempó a távolsághoz igazodik (rövid úton gyors, hosszún max. ~1,4 s), így nincs
+// „nagy erejű” száguldás; `immediate` esetén azonnal ugrik (pl. betöltéskori horgony-link).
+export function scrollToTarget(target: string | number, offset = -72, immediate = false) {
+  const element = typeof target === 'string' ? document.querySelector<HTMLElement>(target) : null
+  const top = typeof target === 'number' ? target : element ? element.getBoundingClientRect().top + window.scrollY + offset : 0
+  const instant = immediate || reducedMotion()
+  if (lenis) {
+    const distance = Math.abs(top - window.scrollY)
+    const duration = Math.min(1.4, 0.6 + distance / 4000)
+    lenis.scrollTo(Math.max(0, top), { immediate: instant, force: true, duration, easing: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2) })
+  } else window.scrollTo({ top: Math.max(0, top), behavior: instant ? 'auto' : 'smooth' })
 }
 
 export { gsap, ScrollTrigger }

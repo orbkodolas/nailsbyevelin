@@ -7,14 +7,14 @@ export function Footer() {
   return (
     <footer className="site-footer">
       <div className="footer-top">
-        <a className="footer-word" href="#kezdo" aria-label="Vissza az oldal tetejére">Nails <em>by</em> Evelin</a>
+        <a className="footer-word" href="#kezdo" aria-label="Nails by Evelin – vissza az oldal tetejére">Nails <em>by</em> Evelin</a>
         <nav aria-label="Lábléc navigáció">
           <a href="#szolgaltatasok">Szolgáltatások</a><a href="#munkak">Munkáim</a><a href="#arlista">Árlista</a>
           <a href="#hazirend">Házirend</a><a href="#utalvany">Utalvány</a><a href="#idopont">Időpontfoglalás</a>
         </nav>
-        {(site.phone || site.address || site.instagramUrl) && <ul className="footer-contact">
+        {(site.phone || site.address || site.city || site.instagramUrl) && <ul className="footer-contact">
           {site.phone && <li><a href={`tel:${site.phone.replace(/\s/g, '')}`}>{site.phone}</a></li>}
-          {site.address && <li>{site.address}</li>}
+          {site.address ? <li>{site.address}</li> : site.city && <li>{site.postalCode} {site.city}, {site.region}</li>}
           {site.instagramUrl && <li><a href={site.instagramUrl} rel="noopener noreferrer" target="_blank">Instagram</a></li>}
         </ul>}
         {site.facebookUrl && (

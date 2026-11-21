@@ -8,7 +8,6 @@
   animation: chat-pop 0.6s var(--ease) 1.2s backwards;
 }
 .chat-fab:hover { transform: translateY(-2px); }
-.chat-fab:active { transform: scale(0.94); }
 .chat-fab-icon { position: absolute; transition: transform 0.35s var(--ease), opacity 0.25s var(--ease); }
 .chat-fab-close { opacity: 0; transform: rotate(-90deg) scale(0.6); }
 .chat-fab[data-open] .chat-fab-open { opacity: 0; transform: rotate(90deg) scale(0.6); }
@@ -83,11 +82,12 @@
   background: var(--rose); color: var(--ink); transition: opacity 0.2s, transform 0.2s;
 }
 .chat-send:disabled { opacity: 0.35; cursor: default; }
-.chat-send:not(:disabled):active { transform: scale(0.92); }
 
 /* Mobilon nyitott panelnél a gomb elbújik (a panel fejlécében van bezárás) */
 @media (max-width: 759.98px) {
   .chat-fab[data-open] { opacity: 0; pointer-events: none; transform: scale(0.6); }
+  /* Az oldal alja ne csússzon a lebegő gomb alá */
+  .footer-bottom { padding-bottom: 76px; }
 }
 
 /* Tablet és asztali: kerekített sarokablak a gomb fölött */

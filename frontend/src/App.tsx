@@ -20,6 +20,10 @@ import { ChatBot } from './components/ChatBot'
 import { ManageBooking } from './pages/ManageBooking'
 import { VoucherThanks } from './pages/VoucherThanks'
 
+// A betöltéskori horgonyt egyszer olvassuk ki (a StrictMode kettős effektfuttatása és az URL-tisztítás miatt)
+const initialHash = window.location.hash
+const isReload = () => (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
+
 function Home() {
   const root = useRef<HTMLDivElement>(null)
   useScrollEffects(root)
@@ -30,20 +34,30 @@ function Home() {
     document.fonts?.ready.then(refresh)
     window.addEventListener('load', refresh)
     const timer = window.setTimeout(refresh, 1200)
-    // Közvetlen horgony-link (pl. /#arlista) megnyitásakor a megfelelő szekcióhoz görget; #idopont esetén a foglaló modál nyílik
-    const hash = window.location.hash
-    const jump = hash && !hash.startsWith('#/') && document.querySelector(hash) ? window.setTimeout(() => {
+    // Közvetlen horgony-link (pl. /#arlista) megnyitásakor a szekcióra ugrik (animáció nélkül, nincs hosszú „berántás”);
+    // #idopont esetén a foglaló modál nyílik. A horgonyt utána levesszük az URL-ről, így frissítéskor nem ugrik újra.
+    // Oldalfrissítésnél nincs ugrás: az oldal a tetejéről indul.
+    const hash = initialHash
+    const isSection = hash && !hash.startsWith('#/')
+    if (isSection && window.location.hash === hash) history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+    const jump = isSection && !isReload() && document.querySelector(hash) ? window.setTimeout(() => {
       refresh()
       if (hash === '#idopont') openBooking()
-      else scrollToTarget(hash, hash === '#kezdo' ? 0 : -72)
-    }, 900) : 0
+      else scrollToTarget(hash, hash === '#kezdo' ? 0 : -72, true)
+    }, 600) : 0
     return () => { window.removeEventListener('load', refresh); window.clearTimeout(timer); window.clearTimeout(jump) }
   }, [])
 
   return (
     <div ref={root}>
+      <a className="skip-link" href="#tartalom" onClick={(event) => {
+        event.preventDefault()
+        const main = document.getElementById('tartalom')
+        main?.focus({ preventScroll: true })
+        scrollToTarget('#tartalom', 0)
+      }}>Ugrás a tartalomra</a>
       <Header />
-      <main>
+      <main id="tartalom" tabIndex={-1}>
         <Hero />
         <About />
         <Services />
@@ -80,7 +94,6 @@ export default function App() {
       if (!document.querySelector(href)) return
       event.preventDefault()
       scrollToTarget(href, href === '#kezdo' ? 0 : -72)
-      history.replaceState(null, '', href)
     }
     document.addEventListener('click', onClick)
     return () => document.removeEventListener('click', onClick)

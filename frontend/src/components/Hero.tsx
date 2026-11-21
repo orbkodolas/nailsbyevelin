@@ -36,7 +36,7 @@ export function Hero() {
         <div className="hero-copy">
           <p className="eyebrow" data-hero="fade"><span className="eyebrow-line" />Műköröm · Géllakk · Töltés</p>
           <Headline as="h1" reveal={false} className="hero-title" text={'Idő a\n*szépségre.*'} />
-          <p className="hero-lead" data-hero="fade">Műköröm és géllakk Evelintől. Precízen, kapkodás nélkül: minden szett legalább két óra teljes figyelem.</p>
+          <p className="hero-lead" data-hero="fade">Műköröm és géllakk Evelintől, Kaposváron. Precízen, kapkodás nélkül: minden szett legalább két óra teljes figyelem.</p>
           <div className="hero-actions" data-hero="fade">
             <a className="btn btn-primary" href="#idopont"><span>Időpontot foglalok</span></a>
             <a className="btn-link" href="#munkak">Munkáim</a>
@@ -61,7 +61,7 @@ export function Hero() {
         <li><b>Online</b><span>foglalás, emlékeztetővel</span></li>
         <li><b>Egyedi</b><span>forma, szín, díszítés</span></li>
       </ul>
-      <a className="scroll-cue" href="#rolam" aria-label="Lejjebb az oldalon"><span>Görgess</span><i /></a>
+      <a className="scroll-cue" href="#rolam" aria-label="Görgess lejjebb"><span>Görgess</span><i /></a>
     </section>
   )
 }
