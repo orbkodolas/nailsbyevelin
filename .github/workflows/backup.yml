@@ -1,0 +1,41 @@
+name: DB backup
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: db-backup, cancel-in-progress: false }
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: backend/package-lock.json }
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+      - name: Dump and encrypt
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.NBE_BACKUP_PASSPHRASE }}
+        run: |
+          set -eu
+          DATE=$(date -u +%Y-%m-%d)
+          PLAIN="$RUNNER_TEMP/nbe-db-$DATE.json"
+          ENC="$RUNNER_TEMP/nbe-db-backup-$DATE.json.enc"
+          node tools/backup-db.mjs "$PLAIN"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSPHRASE -in "$PLAIN" -out "$ENC"
+          rm -f "$PLAIN"
+          echo "BACKUP_DATE=$DATE" >> "$GITHUB_ENV"
+          echo "BACKUP_FILE=$ENC" >> "$GITHUB_ENV"
+      - name: Remove plaintext dump (always)
+        if: always()
+        run: rm -f "$RUNNER_TEMP"/nbe-db-*.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nbe-db-backup-${{ env.BACKUP_DATE }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30
+          if-no-files-found: error
