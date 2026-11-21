@@ -44,6 +44,7 @@ export function loadConfig(env = process.env, overrides = {}) {
     depositPercent: num(env.DEPOSIT_PERCENT, 0), // 0 = nincs előleg mindenkinek; meg nem jelenés után mindig teljes előrefizetés
     onlineHoldMinutes: num(env.ONLINE_HOLD_MINUTES, 30),
     manualHoldHours: num(env.MANUAL_HOLD_HOURS, 24),
+    maxReschedules: num(env.MAX_RESCHEDULES, 2),
     lateCancelHours: num(env.LATE_CANCEL_HOURS, 24),
 
     // Értesítések

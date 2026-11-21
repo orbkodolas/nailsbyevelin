@@ -162,6 +162,13 @@
 .status-list dd { text-align: right; }
 .status-actions { margin: 16px 0; }
 .status-actions p { margin-bottom: 12px; }
+.status-modify { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.status-modify .hint { margin-top: 14px; }
+.text-link { padding: 0; border: 0; background: none; font: inherit; color: var(--text); text-decoration: underline; text-decoration-color: var(--rose-deep); text-underline-offset: 3px; cursor: pointer; }
+.text-link:hover { color: var(--rose); }
+.status-list dd.is-old { color: var(--muted); text-decoration: line-through; }
+.step-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin-top: 22px; }
+.status-cancel-small { margin-top: 4px; }
 .status-cancel { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
 .status-cancel .btn { margin-right: 14px; }
 .pill { display: inline-block; margin-bottom: 4px; padding: 0.3em 0.9em; border: 1px solid; border-radius: 999px; font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; }

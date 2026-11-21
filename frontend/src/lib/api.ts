@@ -5,7 +5,7 @@ export type PaymentMethod = { id: string; label: string }
 export type PublicBooking = {
   id: string; status: 'booked' | 'pending_payment' | 'cancelled' | 'expired' | 'no_show' | 'completed' | 'rejected'
   paymentStatus: string; confirmationStatus: 'awaiting' | 'confirmed'; firstName: string; serviceName: string; durationMinutes: number
-  startsAt: string; endsAt: string; priceHuf: number; amountDueHuf: number; amountPaidHuf: number; holdExpiresAt: string | null; lateCancellation: boolean
+  startsAt: string; endsAt: string; priceHuf: number; amountDueHuf: number; amountPaidHuf: number; holdExpiresAt: string | null; lateCancellation: boolean; canReschedule: boolean
 }
 export type CreatedBooking = PublicBooking & { manageToken: string; manageUrl: string; payment: Payment | null; policy: string }
 export type Availability = { timezone: string; serviceId: string; durationMinutes: number; days: Record<string, string[]> }
@@ -38,6 +38,8 @@ export const getAvailability = (serviceId: string, from: string, to: string) => 
 export const createBooking = (payload: Record<string, unknown>) => request<CreatedBooking>('/api/bookings', { method: 'POST', body: payload })
 export const getBooking = (id: string, token: string) => request<PublicBooking>(`/api/bookings/${id}`, { headers: { 'x-manage-token': token } })
 export const bookingAction = (id: string, token: string, action: 'confirm' | 'cancel') => request<PublicBooking>(`/api/bookings/${id}/${action}`, { method: 'POST', body: { token } })
+export const getRescheduleAvailability = (id: string, token: string, from: string, to: string) => request<Availability>(`/api/bookings/${id}/availability?from=${from}&to=${to}`, { headers: { 'x-manage-token': token } })
+export const rescheduleBooking = (id: string, token: string, date: string, time: string) => request<PublicBooking>(`/api/bookings/${id}/reschedule`, { method: 'POST', body: { token, date, time } })
 export const payBooking = (id: string, token: string, paymentMethod?: string) => request<{ payment: Payment }>(`/api/bookings/${id}/pay`, { method: 'POST', body: { token, paymentMethod } })
 export const payDemo = (paymentId: string, card: string) => request<{ ok: true }>(`/api/payments/demo/${paymentId}`, { method: 'POST', body: { card } })
 export const createVoucher =(payload: Record<string, unknown>) => request<{ id: string; amountHuf: number; payment: Payment }>('/api/vouchers', { method: 'POST', body: payload })

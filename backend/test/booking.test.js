@@ -337,3 +337,47 @@ test('admin: több napos szabadság és napon belüli időszak letiltása', asyn
   const slots = await day('2026-11-30')
   assert.ok(slots.length > 0 && slots.every((time) => time >= '12:00'))
 }))
+
+test('időpont módosítása: szabad idők a saját hellyel, új idő rögzül, régi felszabadul, korlátok működnek', async () => withApi({ config: { maxDaysAhead: 30, depositPercent: 0 } }, async ({ call, clock }) => {
+  const oldAt = slotAt('2026-11-26', '09:00'); const newAt = slotAt('2026-11-27', '10:00')
+  const booking = await (await call('POST', '/api/bookings', guest({ startsAt: oldAt }))).json()
+  assert.equal(booking.status, 'booked'); assert.equal(booking.canReschedule, true)
+  const token = booking.manageToken; const url = (action) => `/api/bookings/${booking.id}/${action}`
+
+  // a saját (régi) hely a módosításnál szabad, a nyilvános listában foglalt
+  const own = await (await call('GET', `${url('availability')}?token=${token}&from=2026-11-26&to=2026-11-26`)).json()
+  assert.ok(own.days['2026-11-26'].includes('09:00'))
+  const pub = await (await call('GET', '/api/availability?serviceId=gel-egyszinu&from=2026-11-26&to=2026-11-26')).json()
+  assert.ok(!pub.days['2026-11-26'].includes('09:00'))
+  assert.equal((await call('GET', `${url('availability')}?token=rossz&from=2026-11-26&to=2026-11-26`)).status, 404)
+
+  // ugyanarra az időpontra és foglalt helyre nem lehet
+  assert.equal((await call('POST', url('reschedule'), { token, date: '2026-11-26', time: '09:00' })).status, 409)
+  await call('POST', '/api/bookings', guest({ phone: '+36 20 111 2222', email: 'b@example.com', startsAt: newAt }))
+  const taken = await call('POST', url('reschedule'), { token, date: '2026-11-27', time: '10:00' })
+  assert.equal(taken.status, 409); assert.equal((await taken.json()).error, 'slot_unavailable')
+
+  const moved = await call('POST', url('reschedule'), { token, date: '2026-11-27', time: '14:00' })
+  assert.equal(moved.status, 200)
+  const view = await moved.json()
+  assert.equal(view.startsAt, slotAt('2026-11-27', '14:00'))
+  const freed = await (await call('GET', '/api/availability?serviceId=gel-egyszinu&from=2026-11-26&to=2026-11-26')).json()
+  assert.ok(freed.days['2026-11-26'].includes('09:00'))
+
+  // legfeljebb 2 módosítás
+  assert.equal((await call('POST', url('reschedule'), { token, date: '2026-11-27', time: '15:00' })).status, 200)
+  const limit = await call('POST', url('reschedule'), { token, date: '2026-11-27', time: '16:00' })
+  assert.equal(limit.status, 409); assert.equal((await limit.json()).error, 'reschedule_limit')
+}))
+
+test('időpont módosítása: 24 órán belül és lemondott foglalásnál nem engedett', async () => withApi({ config: { maxDaysAhead: 30, depositPercent: 0 } }, async ({ call, clock }) => {
+  const booking = await (await call('POST', '/api/bookings', guest({ startsAt: slotAt('2026-11-23', '15:00') }))).json()
+  const token = booking.manageToken
+  const late = await call('POST', `/api/bookings/${booking.id}/reschedule`, { token, date: '2026-11-27', time: '10:00' })
+  assert.equal(late.status, 409); assert.equal((await late.json()).error, 'too_late_to_reschedule')
+  assert.equal((await (await call('GET', `/api/bookings/${booking.id}?token=${token}`)).json()).canReschedule, false)
+
+  const other = await (await call('POST', '/api/bookings', guest({ phone: '+36 20 111 2222', email: 'b@example.com', startsAt: slotAt('2026-11-27', '09:00') }))).json()
+  await call('POST', `/api/bookings/${other.id}/cancel`, { token: other.manageToken })
+  assert.equal((await call('POST', `/api/bookings/${other.id}/reschedule`, { token: other.manageToken, date: '2026-11-28', time: '10:00' })).status, 409)
+}))

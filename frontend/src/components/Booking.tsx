@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { catalog, durationLabel, forint } from '../lib/catalog'
 import { ApiError, createBooking, getAvailability, getBooking, getSettings, type Availability, type CreatedBooking, type PaymentMethod } from '../lib/api'
-import { MONTHS, WEEKDAYS, addDays, formatDateTime, formatLongDate, formatWhen, monthGrid, todayString } from '../lib/dates'
+import { addDays, formatDateTime, formatLongDate, formatWhen, todayString } from '../lib/dates'
 import { gsap, reducedMotion } from '../lib/motion'
 import { openBooking } from '../lib/bookingModal'
 import { Headline } from './Headline'
+import { SlotPicker } from './SlotPicker'
 import { PaymentPicker } from './PaymentPicker'
 import { DemoPayment } from './DemoPayment'
 
@@ -37,7 +37,6 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
   const [loading, setLoading] = useState(false)
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
-  const [cursor, setCursor] = useState(() => { const now = new Date(); return { year: now.getFullYear(), month: now.getMonth() } })
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [emailEnabled, setEmailEnabled] = useState(false)
   const [deposit, setDeposit] = useState(0)
@@ -70,16 +69,6 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
       .finally(() => setLoading(false))
   }, [category, maxDays])
   useEffect(() => { loadAvailability() }, [loadAvailability])
-
-  const grid = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor])
-  const days = availability?.days ?? {}
-  const monthHasSlots = grid.some((day) => day && days[day]?.length)
-  const slots = date ? days[date] ?? [] : []
-  const now = new Date()
-  const canGoBack = cursor.year > now.getFullYear() || cursor.month > now.getMonth()
-  const lastDay = availability ? Object.keys(days).at(-1) ?? '' : ''
-  const canGoForward = Boolean(lastDay) && `${cursor.year}-${String(cursor.month + 1).padStart(2, '0')}` < lastDay.slice(0, 7)
-  const shiftMonth = (delta: number) => setCursor(({ year, month }) => { const d = new Date(year, month + delta, 1); return { year: d.getFullYear(), month: d.getMonth() } })
 
   useEffect(() => {
     if (!created || reducedMotion() || !panel.current) return
@@ -155,34 +144,8 @@ function BookingForm({ initialCategory }: { initialCategory?: string }) {
 
             <fieldset className={`step${step2Ready ? '' : ' is-locked'}`} disabled={!step2Ready}>
               <legend><span className="step-no">2</span>Időpont</legend>
-              {loadError ? (
-                <div className="notice" role="alert">{loadError} <button type="button" className="btn-link" onClick={loadAvailability}>Újra</button></div>
-              ) : (
-                <div className="calendar" aria-busy={loading}>
-                  <div className="calendar-nav">
-                    <button type="button" onClick={() => shiftMonth(-1)} disabled={!canGoBack} aria-label="Előző hónap"><ChevronLeft size={20} strokeWidth={1.5} aria-hidden="true" /></button>
-                    <b>{cursor.year}. {MONTHS[cursor.month]}</b>
-                    <button type="button" onClick={() => shiftMonth(1)} disabled={!canGoForward} aria-label="Következő hónap"><ChevronRight size={20} strokeWidth={1.5} aria-hidden="true" /></button>
-                  </div>
-                  <div className="calendar-grid" role="grid">
-                    {WEEKDAYS.map((weekday, index) => <span key={index} className="weekday">{weekday}</span>)}
-                    {grid.map((day, index) => day === null ? <span key={`e${index}`} /> : (
-                      <button key={day} type="button" className={`day${day === date ? ' is-on' : ''}`} disabled={!days[day]?.length}
-                        aria-label={formatLongDate(day)} aria-pressed={day === date} onClick={() => { setDate(day); setTime('') }}>{Number(day.slice(8))}</button>
-                    ))}
-                  </div>
-                  {!loading && availability && !monthHasSlots && <p className="hint">Ebben a hónapban nincs szabad időpont.</p>}
-                  <p className="hint">Időpontot legfeljebb {maxDays} napra előre lehet foglalni.</p>
-                </div>
-              )}
-              {date && (
-                <div className="times" aria-label={`Szabad időpontok: ${formatLongDate(date)}`}>
-                  <p className="hint">{formatLongDate(date)}</p>
-                  <div className="time-list">
-                    {slots.map((slot) => <button key={slot} type="button" className={`time${slot === time ? ' is-on' : ''}`} aria-pressed={slot === time} onClick={() => setTime(slot)}>{slot}</button>)}
-                  </div>
-                </div>
-              )}
+              <SlotPicker days={availability?.days ?? {}} loaded={Boolean(availability)} loading={loading} error={loadError} onRetry={loadAvailability}
+                maxDays={maxDays} date={date} time={time} onDate={(day) => { setDate(day); setTime('') }} onTime={setTime} />
             </fieldset>
 
             <fieldset className={`step${step3Ready ? '' : ' is-locked'}`} disabled={!step3Ready}>
@@ -230,7 +193,7 @@ function Confirmed({ booking }: { booking: CreatedBooking }) {
       {booking.amountPaidHuf > 0 && <p className="done-small done-note" data-done>Az előleg ({forint(booking.amountPaidHuf)}) már levonva, ennyit fizetsz a helyszínen.</p>}
       <p data-done>Köszönöm a bizalmad!<br />Szeretettel várlak ekkor: <b>{date} {time}</b></p>
       <p data-done>Kérlek, ne hozz magaddal senkit, hacsak nem egymás után van időpontotok. Kérlek, ne késs — legfeljebb 15 perces késést tudok tolerálni, azon felül sajnos már nem foglak tudni fogadni.</p>
-      <p className="done-small" data-done>Ha le szeretnéd mondani az időpontod, azt megteheted az e-mail címedre küldött levélben, az „Időpont lemondása” gombra kattintva.</p>
+      <p className="done-small" data-done>Ha le szeretnéd mondani az időpontod, azt megteheted az e-mail címedre küldött levélben, az „Időpont kezelése” gombra kattintva.</p>
     </div>
   )
 }

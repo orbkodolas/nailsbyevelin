@@ -169,17 +169,33 @@ export function createApp(options = {}) {
   if (adminLocked) log.error?.('[biztonság] ADMIN_TOKEN nincs beállítva – az admin felület le van zárva.')
 
   const holds = (booking) => booking.status === 'booked' || (booking.status === 'pending_payment' && booking.holdExpiresAt > now().toISOString())
-  const busyRanges = (state) => [
-    ...state.bookings.filter(holds),
+  // excludeId: időpont-módosításnál a foglalás saját, még régi helye nem számít foglaltnak
+  const busyRanges = (state, excludeId) => [
+    ...state.bookings.filter((item) => item.id !== excludeId && holds(item)),
     ...state.blocks,
   ]
-  const slotsOn = (state, date, durationMinutes) => slotsForDate({ date, durationMinutes, busy: busyRanges(state), config, now: now(), openings: state.openings ?? [] })
+  const slotsOn = (state, date, durationMinutes, excludeId) => slotsForDate({ date, durationMinutes, busy: busyRanges(state, excludeId), config, now: now(), openings: state.openings ?? [] })
+
+  // Online módosítás: csak rögzített foglalásnál, a lemondási határidőn belül és korlátozott számban
+  const rescheduleProblem = (booking) => {
+    if (booking.status !== 'booked') return 'booking_not_active'
+    if (Date.parse(booking.startsAt) - now().getTime() < config.lateCancelHours * HOUR) return 'too_late_to_reschedule'
+    if ((booking.rescheduleCount || 0) >= config.maxReschedules) return 'reschedule_limit'
+    return null
+  }
+  const rescheduleMessages = {
+    booking_not_active: 'Ez a foglalás már nem módosítható.',
+    too_late_to_reschedule: `Az időpont ${config.lateCancelHours} órán belül van, ezért online már nem módosítható. Kérlek, írj Evelinnek.`,
+    reschedule_limit: `Az időpont legfeljebb ${config.maxReschedules} alkalommal módosítható online. Kérlek, írj Evelinnek.`,
+    slot_unavailable: 'Ez az időpont már nem szabad. Válassz másikat.',
+  }
 
   const publicBooking = (booking) => ({
     id: booking.id, status: booking.status === 'pending_payment' && booking.holdExpiresAt <= now().toISOString() ? 'expired' : booking.status, paymentStatus: booking.paymentStatus, confirmationStatus: booking.confirmationStatus,
     firstName: booking.name.split(' ')[0], serviceName: booking.serviceName, durationMinutes: booking.durationMinutes,
     startsAt: booking.startsAt, endsAt: booking.endsAt, priceHuf: booking.priceHuf, amountDueHuf: booking.amountDueHuf,
     amountPaidHuf: booking.amountPaidHuf, holdExpiresAt: booking.holdExpiresAt || null, lateCancellation: Boolean(booking.lateCancellation),
+    canReschedule: rescheduleProblem(booking) === null,
   })
 
   const releaseBooking = (state, booking, status) => {
@@ -297,6 +313,20 @@ export function createApp(options = {}) {
     return { expired: changed }
   }
 
+  const availabilityRange = (url) => {
+    const today = localDate(now(), config.timezone)
+    const from = url.searchParams.get('from') || today
+    const lastBookable = addDays(today, config.maxDaysAhead)
+    const requestedTo = url.searchParams.get('to') || lastBookable
+    if (!isDateString(from) || !isDateString(requestedTo) || requestedTo < from || requestedTo > addDays(from, 62)) return null
+    return { from, to: requestedTo < lastBookable ? requestedTo : lastBookable }
+  }
+  const availabilityDays = (state, durationMinutes, { from, to }, excludeId) => {
+    const result = {}
+    for (let date = from; date <= to; date = addDays(date, 1)) result[date] = slotsOn(state, date, durationMinutes, excludeId).map((slot) => slot.time)
+    return result
+  }
+
   // ---------- kéréskezelő ----------
   async function app(req, res) {
     setSecurityHeaders(res)
@@ -317,17 +347,9 @@ export function createApp(options = {}) {
       if (req.method === 'GET' && path === '/api/availability') {
         const service = findService(url.searchParams.get('serviceId'))
         if (!service) return json(res, 400, { error: 'invalid_service' })
-        const today = localDate(now(), config.timezone)
-        const from = url.searchParams.get('from') || today
-        const lastBookable = addDays(today, config.maxDaysAhead)
-        const requestedTo = url.searchParams.get('to') || lastBookable
-        if (!isDateString(from) || !isDateString(requestedTo) || requestedTo < from || requestedTo > addDays(from, 62)) return json(res, 400, { error: 'invalid_range' })
-        const to = requestedTo < lastBookable ? requestedTo : lastBookable
-        const days = await store.read((state) => {
-          const result = {}
-          for (let date = from; date <= to; date = addDays(date, 1)) result[date] = slotsOn(state, date, service.durationMinutes).map((slot) => slot.time)
-          return result
-        })
+        const range = availabilityRange(url)
+        if (!range) return json(res, 400, { error: 'invalid_range' })
+        const days = await store.read((state) => availabilityDays(state, service.durationMinutes, range))
         return json(res, 200, { timezone: config.timezone, serviceId: service.id, durationMinutes: service.durationMinutes, days })
       }
 
@@ -414,8 +436,8 @@ export function createApp(options = {}) {
       }
 
       // ----- vendég: saját foglalás kezelése (token kell) -----
-      const bookingRoute = path.match(/^\/api\/bookings\/([\w-]+)(?:\/(confirm|cancel|pay))?$/)
-      if (bookingRoute && ((req.method === 'GET' && !bookingRoute[2]) || (req.method === 'POST' && bookingRoute[2]))) {
+      const bookingRoute = path.match(/^\/api\/bookings\/([\w-]+)(?:\/(confirm|cancel|pay|reschedule|availability))?$/)
+      if (bookingRoute && ((req.method === 'GET' && (!bookingRoute[2] || bookingRoute[2] === 'availability')) || (req.method === 'POST' && bookingRoute[2] && bookingRoute[2] !== 'availability'))) {
         const [, id, action] = bookingRoute
         const body = req.method === 'POST' ? await readBody(req) : {}
         const token = req.headers['x-manage-token'] || body.token || url.searchParams.get('token')
@@ -423,6 +445,45 @@ export function createApp(options = {}) {
         const found = await store.read((state) => state.bookings.find((item) => item.id === id))
         if (!found || !sameToken(token, found.manageToken)) { tokenFailures.hit(ipOf(req)); return json(res, 404, { error: 'not_found' }) }
         if (!action) return json(res, 200, publicBooking(found))
+
+        if (action === 'availability') {
+          const problem = rescheduleProblem(found)
+          if (problem) return json(res, 409, { error: problem, message: rescheduleMessages[problem] })
+          const range = availabilityRange(url)
+          if (!range) return json(res, 400, { error: 'invalid_range' })
+          const days = await store.read((state) => availabilityDays(state, found.durationMinutes, range, found.id))
+          return json(res, 200, { timezone: config.timezone, serviceId: found.serviceId, durationMinutes: found.durationMinutes, days })
+        }
+
+        if (action === 'reschedule') {
+          if (!isDateString(body.date) || !/^\d{2}:\d{2}$/.test(body.time || '')) return json(res, 400, { error: 'invalid_start_time', message: 'Érvénytelen időpont.' })
+          const start = zonedToUtc(body.date, body.time, config.timezone)
+          const result = await store.update((state) => {
+            const booking = state.bookings.find((item) => item.id === id)
+            const problem = rescheduleProblem(booking)
+            if (problem) return { error: problem }
+            const end = new Date(start.getTime() + booking.durationMinutes * 60_000)
+            if (!slotsOn(state, body.date, booking.durationMinutes, booking.id).some((slot) => slot.time === body.time && slot.startsAt === start.toISOString())) return { error: 'slot_unavailable' }
+            if (start.toISOString() === booking.startsAt) return { error: 'same_slot' }
+            const previousStartsAt = booking.startsAt
+            booking.rescheduledFrom = [...(booking.rescheduledFrom || []), { startsAt: previousStartsAt, endsAt: booking.endsAt, at: now().toISOString() }]
+            booking.rescheduleCount = (booking.rescheduleCount || 0) + 1
+            booking.startsAt = start.toISOString()
+            booking.endsAt = end.toISOString()
+            // Az emlékeztetők az új időponthoz igazodnak
+            for (const reminder of state.reminders) if (reminder.bookingId === booking.id && reminder.status === 'queued') reminder.status = 'cancelled'
+            for (const [kind, offset] of [['day_before', DAY], ['two_hours_before', 2 * HOUR]]) {
+              const dueAt = start.getTime() - offset
+              if (dueAt > now().getTime()) state.reminders.push({ id: randomUUID(), bookingId: booking.id, kind, dueAt: new Date(dueAt).toISOString(), status: 'queued' })
+            }
+            return { booking, previousStartsAt }
+          })
+          if (result.error === 'same_slot') return json(res, 409, { error: result.error, message: 'Ez már a jelenlegi időpontod. Válassz másikat.' })
+          if (result.error) return json(res, 409, { error: result.error, message: rescheduleMessages[result.error] })
+          background(notifier.ownerBookingEvent(result.booking, 'rescheduled', { previousWhen: formatDateTime(result.previousStartsAt, config.timezone) }))
+          background(notifier.guestRescheduleMail(result.booking, result.previousStartsAt))
+          return json(res, 200, publicBooking(result.booking))
+        }
 
         if (action === 'pay') {
           if (found.status !== 'pending_payment' || found.holdExpiresAt <= now().toISOString()) return json(res, 409, { error: 'payment_not_required' })
