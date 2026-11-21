@@ -144,7 +144,7 @@ export function ChatBot() {
       <div ref={panel} id="chat-panel" className="chat-panel" data-open={open || undefined} role="dialog" aria-modal="false"
         aria-label="Nails by Evelin asszisztens" aria-hidden={!open} inert={!open} data-lenis-prevent>
         <header className="chat-head">
-          <img className="chat-avatar" src="/images/logo-sm.webp" alt="" width={40} height={40} />
+          <img className="chat-avatar" src={`${import.meta.env.BASE_URL}images/logo-sm.webp`} alt="" width={40} height={40} />
           <div className="chat-title">
             <strong>Nails <em>by</em> Evelin</strong>
             <span><i className="chat-online" aria-hidden="true" />Asszisztens · azonnal válaszol</span>
